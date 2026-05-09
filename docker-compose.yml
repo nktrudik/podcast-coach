@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+      - ./temp:/app/temp
+      # To enable YouTube cookies, create ./secrets/youtube_cookies.txt,
+      # set YOUTUBE_COOKIES_FILE=/app/secrets/youtube_cookies.txt in .env,
+      # and uncomment the read-only mount below.
+      # - ./secrets/youtube_cookies.txt:/app/secrets/youtube_cookies.txt:ro
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      FRONTEND_BACKEND_BASE_URL: http://backend:8000
+      FRONTEND_REQUEST_TIMEOUT_SECONDS: ${FRONTEND_REQUEST_TIMEOUT_SECONDS:-180}

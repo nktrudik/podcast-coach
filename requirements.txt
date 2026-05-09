@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+openai
+yt-dlp
+pydantic-settings
+streamlit
+requests

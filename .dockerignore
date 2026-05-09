@@ -1,0 +1,22 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+storage/
+temp/
+*.log
+cookies.txt
+*.cookies
+secrets/
+.git/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+*.sqlite
+
+# Local ffmpeg binaries must not be copied into images.
+ffmpeg
+ffmpeg.exe
+ffprobe
+ffprobe.exe
