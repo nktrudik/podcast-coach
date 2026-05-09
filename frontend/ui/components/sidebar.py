@@ -8,12 +8,49 @@ from frontend.ui.actions import (
     select_session,
     select_video,
 )
-from frontend.ui.catalog import format_session_label, format_video_label, group_sessions_by_video
+from frontend.ui.catalog import (
+    format_session_label,
+    format_video_caption,
+    format_video_label,
+    group_sessions_by_video,
+)
 from frontend.ui.state import as_positive_int
 
 
+def render_upload_form(
+    client: BackendAPIClient,
+    *,
+    key_prefix: str,
+    button_label: str = "Загрузить видео",
+) -> None:
+    """Рендерит форму загрузки YouTube-видео."""
+    input_key = f"{key_prefix}_youtube_url"
+    pending_reset_keys = st.session_state.get("pending_reset_input_keys", [])
+    if input_key in pending_reset_keys:
+        st.session_state[input_key] = ""
+        st.session_state.pending_reset_input_keys = [
+            key for key in pending_reset_keys if key != input_key
+        ]
+
+    st.text_input(
+        "YouTube URL",
+        key=input_key,
+        placeholder="https://www.youtube.com/watch?v=...",
+        label_visibility="collapsed",
+    )
+
+    if st.button(
+        button_label,
+        key=f"{key_prefix}_upload_video_button",
+        use_container_width=True,
+        type="primary",
+    ):
+        if process_video_upload(client, state_key=input_key):
+            st.rerun()
+
+
 def render_upload_block(client: BackendAPIClient) -> None:
-    """Рендерит отдельный блок загрузки нового видео в sidebar."""
+    """Рендерит блок загрузки нового видео в sidebar."""
     if st.session_state.get("pending_reset_upload_toggle"):
         st.session_state.allow_new_video_upload = False
         st.session_state.pending_reset_upload_toggle = False
@@ -21,39 +58,9 @@ def render_upload_block(client: BackendAPIClient) -> None:
         st.session_state.youtube_url = ""
         st.session_state.pending_reset_youtube_url = False
 
-    with st.expander("Добавить новое видео", expanded=not st.session_state.videos):
-        st.info("Поддерживаются только видео длительностью до 30 минут.")
-
-        selected_video_id = as_positive_int(st.session_state.selected_video_id)
-
-        if selected_video_id is None:
-            st.caption("Загрузи новое видео и сразу открой чат.")
-            allow_upload = True
-        else:
-            st.caption(
-                f"Сейчас выбран видео #{selected_video_id}. Для нового чата по нему используй кнопку "
-                "\"Новый чат для этого видео\" ниже."
-            )
-            allow_upload = st.checkbox(
-                "Хочу загрузить другое видео",
-                key="allow_new_video_upload",
-            )
-
-        st.text_input(
-            "Ссылка на YouTube",
-            key="youtube_url",
-            placeholder="https://www.youtube.com/watch?v=...",
-            disabled=not allow_upload,
-        )
-
-        if st.button(
-            "Загрузить и открыть чат",
-            key="upload_video_button",
-            use_container_width=True,
-            disabled=not allow_upload,
-        ):
-            if process_video_upload(client):
-                st.rerun()
+    with st.expander("Добавить видео", expanded=False):
+        st.caption("Вставь ссылку. После обработки откроется чат.")
+        render_upload_form(client, key_prefix="sidebar", button_label="Загрузить видео")
 
 
 def render_video_tree(client: BackendAPIClient) -> None:
@@ -80,10 +87,15 @@ def render_video_tree(client: BackendAPIClient) -> None:
             title = f"{title} ({len(related_sessions)})"
 
         with st.expander(title, expanded=is_selected_video):
+            full_caption = format_video_caption(video)
+            if full_caption:
+                st.caption(full_caption)
+
             if st.button(
-                "Выбрать видео",
+                "Выбери видео",
                 key=f"choose_video_{video_id}",
                 use_container_width=True,
+                type="primary" if is_selected_video and st.session_state.selected_session_id is None else "secondary",
             ):
                 if select_video(client, video_id):
                     st.rerun()
@@ -91,14 +103,14 @@ def render_video_tree(client: BackendAPIClient) -> None:
             if not related_sessions:
                 st.caption("У этого видео пока нет чат-сессий")
             else:
-                for session in related_sessions:
+                for index, session in enumerate(related_sessions, start=1):
                     session_id = as_positive_int(session.get("id"))
                     if session_id is None:
                         continue
 
                     is_selected_session = session_id == st.session_state.selected_session_id
                     if st.button(
-                        format_session_label(session),
+                        format_session_label(session, index),
                         key=f"choose_session_{session_id}",
                         use_container_width=True,
                         type="primary" if is_selected_session else "secondary",
@@ -107,7 +119,7 @@ def render_video_tree(client: BackendAPIClient) -> None:
                             st.rerun()
 
             if st.button(
-                "Новый чат для этого видео",
+                "Создать чат",
                 key=f"new_chat_for_video_{video_id}",
                 use_container_width=True,
             ):
@@ -118,12 +130,14 @@ def render_video_tree(client: BackendAPIClient) -> None:
 def render_sidebar(client: BackendAPIClient) -> None:
     """Рендерит sidebar в стиле ChatGPT: управление видео и чатами."""
     with st.sidebar:
-        st.header("Видео и чаты")
+        st.title("English Podcast Coach")
+        st.caption("История чатов")
 
-        if st.button("Обновить список", use_container_width=True):
+        render_upload_block(client)
+        if st.button("Обновить", use_container_width=True):
             if refresh_state(client):
                 st.rerun()
 
-        render_upload_block(client)
         st.divider()
+        st.caption("Видео")
         render_video_tree(client)

@@ -15,6 +15,7 @@ def init_session_state() -> None:
         "allow_new_video_upload": False,
         "pending_reset_upload_toggle": False,
         "pending_reset_youtube_url": False,
+        "pending_reset_input_keys": [],
         "is_video_ready": False,
         "is_state_bootstrapped": False,
     }

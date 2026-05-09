@@ -10,7 +10,6 @@ from app.db.repositories.videos import (
     count_videos,
     get_video_by_youtube_video_id,
     save_video_transcript,
-    update_video_title,
 )
 from app.services.errors import ServiceValidationError, VideoProcessingError
 
@@ -70,6 +69,12 @@ def process_video(youtube_url: str) -> int:
     logger.info("Запущена обработка видео")
 
     try:
+        video = get_video_by_youtube_video_id(youtube_video_id)
+        if video:
+            video_id = int(video["id"])
+            logger.info("Видео найдено в кэше БД")
+            return video_id
+
         metadata = get_video_metadata(normalized_url)
         video_title_raw = metadata.get("title")
         video_title = video_title_raw if isinstance(video_title_raw, str) and video_title_raw.strip() else None
@@ -91,16 +96,6 @@ def process_video(youtube_url: str) -> int:
                     "actual_duration_seconds": duration_seconds,
                 },
             )
-
-        video = get_video_by_youtube_video_id(youtube_video_id)
-        if video:
-            video_id = int(video["id"])
-            existing_title = video.get("title")
-            has_title = isinstance(existing_title, str) and bool(existing_title.strip())
-            if video_title and not has_title:
-                update_video_title(video_id, video_title)
-            logger.info("Видео найдено в кэше БД")
-            return video_id
 
         videos_total = count_videos()
         if videos_total >= settings.uploaded_videos_limit:
