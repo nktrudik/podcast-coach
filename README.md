@@ -83,5 +83,3 @@ docker compose up --build
 ```env
 FRONTEND_BACKEND_BASE_URL=http://backend:8000
 ```
-
-Это важно: `127.0.0.1` внутри frontend-контейнера означает сам frontend-контейнер, а не backend.
