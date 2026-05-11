@@ -13,6 +13,9 @@ from app.core.youtube import normalize_youtube_url
 
 logger = get_logger(__name__)
 
+RENDER_SECRETS_DIR = "/etc/secrets"
+DOCKER_SECRETS_DIR = "/app/secrets"
+
 
 def _run_youtube_with_retry(operation_name: str, operation):
     """Выполняет YouTube-операцию с мягкими повторами для временных ошибок."""
@@ -68,6 +71,7 @@ def _is_non_retryable_download_error(exc: DownloadError) -> bool:
         "429",
         "forbidden",
         "too many requests",
+        "requested format is not available",
         "sign in to confirm",
         "confirm you're not a bot",
         "confirm you’re not a bot",
@@ -76,24 +80,112 @@ def _is_non_retryable_download_error(exc: DownloadError) -> bool:
     return any(marker in message for marker in non_retryable_markers)
 
 
+def _requires_youtube_auth(exc: DownloadError) -> bool:
+    """Определяет ошибки, где YouTube явно требует cookies/авторизацию."""
+    message = str(exc).lower()
+    auth_markers = (
+        "sign in to confirm",
+        "confirm you're not a bot",
+        "confirm you’re not a bot",
+        "not a bot",
+        "use --cookies",
+        "use --cookies-from-browser",
+    )
+    return any(marker in message for marker in auth_markers)
+
+
+def _is_format_unavailable_error(exc: DownloadError) -> bool:
+    """Определяет ошибку выбора недоступного медиаформата."""
+    return "requested format is not available" in str(exc).lower()
+
+
+def _get_cookie_path_candidates(configured_path: str) -> list[str]:
+    """Возвращает безопасный список путей, где может лежать cookies-файл."""
+    expanded_path = os.path.expandvars(os.path.expanduser(configured_path))
+    if os.path.isabs(expanded_path):
+        return [expanded_path]
+
+    return [
+        expanded_path,
+        os.path.join(RENDER_SECRETS_DIR, expanded_path),
+        os.path.join(DOCKER_SECRETS_DIR, expanded_path),
+    ]
+
+
+def _resolve_youtube_cookies_file(configured_path: str) -> tuple[str | None, list[str]]:
+    """Ищет cookies-файл по указанному пути и стандартным secret-директориям."""
+    candidates = _get_cookie_path_candidates(configured_path)
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate, candidates
+    return None, candidates
+
+
 def _build_ydl_options(**base_options: Any) -> dict[str, Any]:
     """Собирает yt-dlp options и безопасно подключает cookies, если они заданы."""
     ydl_opts = dict(base_options)
-    cookies_file = settings.youtube_cookies_file.strip() if settings.youtube_cookies_file else ""
-    cookies_enabled = bool(cookies_file)
-    logger.info("YouTube cookies enabled: %s", cookies_enabled)
+    configured_cookies_file = (
+        settings.youtube_cookies_file.strip() if settings.youtube_cookies_file else ""
+    )
+    cookies_configured = bool(configured_cookies_file)
 
-    if not cookies_enabled:
+    if not cookies_configured:
+        logger.info("YouTube cookies enabled: False")
         return ydl_opts
 
-    if not os.path.isfile(cookies_file):
+    cookies_file, checked_paths = _resolve_youtube_cookies_file(configured_cookies_file)
+    if cookies_file is None:
         raise YouTubeDownloadError(
             "Файл YouTube cookies не найден",
-            details={"cookies_configured": True, "retryable": False},
+            details={
+                "cookies_configured": True,
+                "configured_path": configured_cookies_file,
+                "checked_paths": checked_paths,
+                "retryable": False,
+            },
         )
 
     ydl_opts["cookiefile"] = cookies_file
+    logger.info("YouTube cookies enabled: True")
     return ydl_opts
+
+
+def _build_download_error(
+    default_message: str,
+    *,
+    youtube_url: str,
+    exc: DownloadError,
+    ydl_opts: dict[str, Any],
+) -> YouTubeDownloadError:
+    """Создает понятную ошибку YouTube без утечки содержимого cookies."""
+    cookies_active = bool(ydl_opts.get("cookiefile"))
+    retryable = not _is_non_retryable_download_error(exc)
+    details: dict[str, Any] = {
+        "youtube_url": youtube_url,
+        "retryable": retryable,
+        "cookies_configured": bool(settings.youtube_cookies_file),
+        "cookies_active": cookies_active,
+    }
+
+    if _requires_youtube_auth(exc):
+        if cookies_active:
+            message = (
+                "YouTube не принял cookies. Проверь, что файл экспортирован из "
+                "авторизованного браузера и не устарел"
+            )
+        else:
+            message = "YouTube требует cookies, но файл cookies не подключен"
+        details["retryable"] = False
+    elif _is_format_unavailable_error(exc):
+        message = (
+            "YouTube не отдал доступный аудиоформат для этого видео. "
+            "Попробуй обновить yt-dlp или использовать другую ссылку"
+        )
+        details["retryable"] = False
+    else:
+        message = default_message
+
+    return YouTubeDownloadError(message, details=details)
 
 
 def _validate_youtube_url(youtube_url: str) -> str:
@@ -148,14 +240,13 @@ def get_video_metadata(youtube_url: str) -> dict[str, Any]:
     def operation() -> dict[str, Any]:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(normalized_url, download=False)
+                info = ydl.extract_info(normalized_url, download=False, process=False)
         except DownloadError as exc:
-            raise YouTubeDownloadError(
+            raise _build_download_error(
                 "Не удалось получить метаданные YouTube-видео",
-                details={
-                    "youtube_url": normalized_url,
-                    "retryable": not _is_non_retryable_download_error(exc),
-                },
+                youtube_url=normalized_url,
+                exc=exc,
+                ydl_opts=ydl_opts,
             ) from exc
 
         if not isinstance(info, dict):
@@ -197,7 +288,7 @@ def download_audio(youtube_url: str) -> str:
         output_template = os.path.join(temp_dir, "%(id)s.%(ext)s")
 
         ydl_opts = _build_ydl_options(
-            format="bestaudio[ext=webm]/bestaudio",
+            format="bestaudio[acodec!=none]/bestaudio/best[acodec!=none]/best",
             outtmpl=output_template,
             noplaylist=True,
         )
@@ -207,12 +298,11 @@ def download_audio(youtube_url: str) -> str:
                 info = ydl.extract_info(normalized_url, download=True)
                 source_path = ydl.prepare_filename(info)
         except DownloadError as exc:
-            raise YouTubeDownloadError(
+            raise _build_download_error(
                 "Не удалось скачать аудио с YouTube",
-                details={
-                    "youtube_url": normalized_url,
-                    "retryable": not _is_non_retryable_download_error(exc),
-                },
+                youtube_url=normalized_url,
+                exc=exc,
+                ydl_opts=ydl_opts,
             ) from exc
 
         if not source_path or not os.path.isfile(source_path):

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "/etc/secrets/.env", "/etc/secrets/env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

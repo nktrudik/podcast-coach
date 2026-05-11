@@ -10,10 +10,10 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./temp:/app/temp
-      # To enable YouTube cookies, create ./secrets/youtube_cookies.txt,
-      # set YOUTUBE_COOKIES_FILE=/app/secrets/youtube_cookies.txt in .env,
+      # To enable YouTube cookies locally, create ./secrets/cookies_www.youtube.com.txt,
+      # set YOUTUBE_COOKIES_FILE=cookies_www.youtube.com.txt in .env,
       # and uncomment the read-only mount below.
-      # - ./secrets/youtube_cookies.txt:/app/secrets/youtube_cookies.txt:ro
+      # - ./secrets/cookies_www.youtube.com.txt:/app/secrets/cookies_www.youtube.com.txt:ro
 
   frontend:
     build:

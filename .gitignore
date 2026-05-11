@@ -19,6 +19,8 @@ secrets/
 .idea/
 .vscode/
 .streamlit/secrets.toml
+.cookies_www.youtube.com.txt
+*cookies_www.youtube.com.txt
 
 # Local ffmpeg binaries must not be committed.
 ffmpeg
