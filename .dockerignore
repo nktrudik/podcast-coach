@@ -13,8 +13,6 @@ secrets/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.db
-*.sqlite
 
 # Local ffmpeg binaries must not be copied into images.
 ffmpeg

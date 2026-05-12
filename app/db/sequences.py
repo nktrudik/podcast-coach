@@ -1,20 +1,20 @@
-import sqlite3
+from psycopg import Connection
 
-from app.db.errors import DatabaseValidationError
-
-_ALLOWED_SEQUENCE_TABLES = {"videos", "chat_sessions", "messages"}
+_SEQUENCE_TABLES = {"videos", "chat_sessions", "messages"}
 
 
-def reset_sequence(conn: sqlite3.Connection, table_name: str) -> None:
-    """Сбрасывает sqlite_sequence до актуального max id в таблице."""
-    if table_name not in _ALLOWED_SEQUENCE_TABLES:
-        raise DatabaseValidationError("Передано недопустимое имя таблицы для sequence")
+def reset_sequence(conn: Connection, table_name: str) -> None:
+    """Синхронизирует PostgreSQL identity sequence с текущим max id таблицы."""
+    if table_name not in _SEQUENCE_TABLES:
+        raise ValueError(f"Недопустимая таблица для сброса sequence: {table_name}")
 
     conn.execute(
         f"""
-        UPDATE sqlite_sequence
-        SET seq = COALESCE((SELECT MAX(id) FROM {table_name}), 0)
-        WHERE name = ?
+        SELECT setval(
+            pg_get_serial_sequence(%s, 'id'),
+            COALESCE((SELECT MAX(id) FROM {table_name}), 1),
+            (SELECT COUNT(*) FROM {table_name}) > 0
+        )
         """,
         (table_name,),
     )

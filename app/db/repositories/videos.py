@@ -1,5 +1,6 @@
-import sqlite3
 from typing import Any
+
+from psycopg import Error, IntegrityError
 
 from app.core.errors import ValidationAppError
 from app.core.logger import get_logger
@@ -31,15 +32,16 @@ def save_video_transcript(
 
     try:
         with get_connection() as conn:
-            cursor = conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO videos (youtube_url, youtube_video_id, title, transcript)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id
                 """,
                 (normalized_url, normalized_video_id, normalized_title, normalized_transcript),
-            )
-            return int(cursor.lastrowid)
-    except sqlite3.IntegrityError:
+            ).fetchone()
+            return int(row["id"])
+    except IntegrityError:
         video = get_video_by_youtube_video_id(normalized_video_id)
         if video:
             video_id = int(video["id"])
@@ -49,7 +51,7 @@ def save_video_transcript(
                 update_video_title(video_id, normalized_title)
             return video_id
         raise DatabaseOperationError("Не удалось сохранить транскрипт видео")
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось сохранить транскрипт видео") from exc
 
 
@@ -64,7 +66,7 @@ def list_videos() -> list[dict[str, Any]]:
                 ORDER BY id DESC
                 """
             ).fetchall()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить список видео") from exc
 
     return [dict(row) for row in rows]
@@ -77,10 +79,10 @@ def get_video(video_id: int) -> dict[str, Any] | None:
     try:
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT * FROM videos WHERE id = ?",
+                "SELECT * FROM videos WHERE id = %s",
                 (validated_video_id,),
             ).fetchone()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить видео") from exc
 
     return dict(row) if row else None
@@ -93,10 +95,10 @@ def get_video_by_youtube_video_id(youtube_video_id: str) -> dict[str, Any] | Non
     try:
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT * FROM videos WHERE youtube_video_id = ?",
+                "SELECT * FROM videos WHERE youtube_video_id = %s",
                 (normalized_video_id,),
             ).fetchone()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить видео по youtube_video_id") from exc
 
     return dict(row) if row else None
@@ -124,13 +126,13 @@ def update_video_title(video_id: int, title: str) -> None:
             conn.execute(
                 """
                 UPDATE videos
-                SET title = ?
-                WHERE id = ?
+                SET title = %s
+                WHERE id = %s
                   AND (title IS NULL OR TRIM(title) = '')
                 """,
                 (normalized_title, validated_video_id),
             )
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось обновить title видео") from exc
 
 
@@ -144,7 +146,7 @@ def count_videos() -> int:
                 FROM videos
                 """
             ).fetchone()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось посчитать количество видео") from exc
 
     total = row["total"] if row else 0
@@ -158,7 +160,7 @@ def delete_video(video_id: int) -> bool:
     try:
         with get_connection() as conn:
             cursor = conn.execute(
-                "DELETE FROM videos WHERE id = ?",
+                "DELETE FROM videos WHERE id = %s",
                 (validated_video_id,),
             )
             deleted = cursor.rowcount > 0
@@ -166,5 +168,5 @@ def delete_video(video_id: int) -> bool:
                 reset_sequence(conn, "videos")
                 logger.info("Видео удалено: video_id=%s", validated_video_id)
             return deleted
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось удалить видео") from exc

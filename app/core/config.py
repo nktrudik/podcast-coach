@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     stt_model_name: str = "mistralai/voxtral-small-24b-2507"
     llm_model_name: str = "inclusionai/ring-2.6-1t:free"
     base_url: str = "https://openrouter.ai/api/v1"
-    db_path: str = "./storage/database.db"
+    database_url: str = "postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach"
     log_level: str = "INFO"
     log_file_path: str = "./storage/logs/backend.log"
     external_request_timeout_seconds: float = Field(default=45.0, gt=0)

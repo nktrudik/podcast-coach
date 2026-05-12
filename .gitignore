@@ -15,8 +15,6 @@ cookies.txt
 cookies_www.youtube.com.txt
 cookies_*.txt
 secrets/
-*.sqlite
-*.db
 .DS_Store
 .idea/
 .vscode/

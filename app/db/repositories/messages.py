@@ -1,5 +1,6 @@
-import sqlite3
 from typing import Any
+
+from psycopg import Error
 
 from app.db.connection import get_connection
 from app.db.errors import DatabaseOperationError, DatabaseValidationError
@@ -27,15 +28,16 @@ def add_message(
 
     try:
         with get_connection() as conn:
-            cursor = conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO messages (session_id, role, content)
-                VALUES (?, ?, ?)
+                VALUES (%s, %s, %s)
+                RETURNING id
                 """,
                 (validated_session_id, normalized_role, normalized_content),
-            )
-            return int(cursor.lastrowid)
-    except sqlite3.Error as exc:
+            ).fetchone()
+            return int(row["id"])
+    except Error as exc:
         raise DatabaseOperationError("Не удалось сохранить сообщение") from exc
 
 
@@ -51,7 +53,7 @@ def get_messages(session_id: int, limit: int | None = None) -> list[dict[str, An
                     """
                     SELECT id, role, content, created_at
                     FROM messages
-                    WHERE session_id = ?
+                    WHERE session_id = %s
                     ORDER BY id
                     """,
                     (validated_session_id,),
@@ -63,15 +65,15 @@ def get_messages(session_id: int, limit: int | None = None) -> list[dict[str, An
                     FROM (
                         SELECT id, role, content, created_at
                         FROM messages
-                        WHERE session_id = ?
+                        WHERE session_id = %s
                         ORDER BY id DESC
-                        LIMIT ?
+                        LIMIT %s
                     )
                     ORDER BY id
                     """,
                     (validated_session_id, validated_limit),
                 ).fetchall()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить историю сообщений") from exc
 
     return [dict(row) for row in rows]

@@ -1,12 +1,31 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: podcast_coach
+      POSTGRES_USER: podcast_coach
+      POSTGRES_PASSWORD: podcast_coach
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U podcast_coach -d podcast_coach"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://podcast_coach:podcast_coach@postgres:5432/podcast_coach}
     volumes:
       - ./storage:/app/storage
       - ./temp:/app/temp
@@ -30,3 +49,6 @@ services:
     environment:
       FRONTEND_BACKEND_BASE_URL: http://backend:8000
       FRONTEND_REQUEST_TIMEOUT_SECONDS: ${FRONTEND_REQUEST_TIMEOUT_SECONDS:-180}
+
+volumes:
+  postgres_data:

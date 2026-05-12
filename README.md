@@ -6,7 +6,7 @@ Podcast Coach - MVP-сервис для практики английской р
 
 - Backend: FastAPI
 - Frontend: Streamlit
-- База данных: SQLite
+- База данных: PostgreSQL
 - Загрузка YouTube: yt-dlp
 - Конвертация аудио: FFmpeg
 - STT/LLM: OpenRouter
@@ -28,6 +28,7 @@ ADMIN_API_KEY=your_admin_key
 - `.env` нельзя коммитить
 - cookies нельзя коммитить
 - `storage/`, `temp/`, `secrets/` нельзя коммитить
+- данные PostgreSQL хранятся в Docker volume `postgres_data`
 - `ffmpeg.exe` и другие бинарники FFmpeg нельзя класть в репозиторий
 
 ## YouTube cookies
@@ -67,6 +68,13 @@ python -m venv .venv
 copy .env.example .env
 ```
 
+Для запуска без Docker нужен доступный PostgreSQL. Если база запущена на хосте,
+поменяй `DATABASE_URL` на локальный адрес, например:
+
+```env
+DATABASE_URL=postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach
+```
+
 Заполнить `.env`, затем запустить backend:
 
 ```powershell
@@ -98,6 +106,9 @@ cp .env.example .env
 ```bash
 docker compose up --build
 ```
+
+Docker Compose поднимет PostgreSQL автоматически и сохранит данные в named volume
+`postgres_data`, поэтому данные не будут пропадать при пересборке backend/frontend.
 
 После запуска:
 

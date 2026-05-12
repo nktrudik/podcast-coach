@@ -1,5 +1,6 @@
-import sqlite3
 from typing import Any
+
+from psycopg import Error
 
 from app.core.logger import get_logger
 from app.db.connection import get_connection
@@ -20,11 +21,11 @@ def count_chat_sessions_by_video(video_id: int) -> int:
                 """
                 SELECT COUNT(*) AS total
                 FROM chat_sessions
-                WHERE video_id = ?
+                WHERE video_id = %s
                 """,
                 (validated_video_id,),
             ).fetchone()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось посчитать чат-сессии по видео") from exc
 
     total = row["total"] if row else 0
@@ -38,15 +39,16 @@ def create_chat_session(video_id: int | None = None, title: str | None = None) -
 
     try:
         with get_connection() as conn:
-            cursor = conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO chat_sessions (video_id, title)
-                VALUES (?, ?)
+                VALUES (%s, %s)
+                RETURNING id
                 """,
                 (normalized_video_id, normalized_title),
-            )
-            return int(cursor.lastrowid)
-    except sqlite3.Error as exc:
+            ).fetchone()
+            return int(row["id"])
+    except Error as exc:
         raise DatabaseOperationError("Не удалось создать чат-сессию") from exc
 
 
@@ -57,10 +59,10 @@ def get_chat_session(session_id: int) -> dict[str, Any] | None:
     try:
         with get_connection() as conn:
             row = conn.execute(
-                "SELECT * FROM chat_sessions WHERE id = ?",
+                "SELECT * FROM chat_sessions WHERE id = %s",
                 (validated_session_id,),
             ).fetchone()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить чат-сессию") from exc
 
     return dict(row) if row else None
@@ -73,7 +75,7 @@ def delete_chat_session(session_id: int) -> bool:
     try:
         with get_connection() as conn:
             cursor = conn.execute(
-                "DELETE FROM chat_sessions WHERE id = ?",
+                "DELETE FROM chat_sessions WHERE id = %s",
                 (validated_session_id,),
             )
             deleted = cursor.rowcount > 0
@@ -82,7 +84,7 @@ def delete_chat_session(session_id: int) -> bool:
                 reset_sequence(conn, "messages")
                 logger.info("Чат-сессия удалена: session_id=%s", validated_session_id)
             return deleted
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось удалить чат-сессию") from exc
 
 
@@ -97,7 +99,7 @@ def list_chat_sessions() -> list[dict[str, Any]]:
                 ORDER BY id DESC
                 """
             ).fetchall()
-    except sqlite3.Error as exc:
+    except Error as exc:
         raise DatabaseOperationError("Не удалось получить список чат-сессий") from exc
 
     return [dict(row) for row in rows]

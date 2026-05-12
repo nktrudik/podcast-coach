@@ -3,5 +3,6 @@ uvicorn
 openai
 yt-dlp[default]
 pydantic-settings
+psycopg[binary]
 streamlit
 requests
