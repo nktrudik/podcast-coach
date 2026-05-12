@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 import time
 from typing import Any
@@ -15,6 +16,11 @@ logger = get_logger(__name__)
 
 RENDER_SECRETS_DIR = "/etc/secrets"
 DOCKER_SECRETS_DIR = "/app/secrets"
+
+
+def _default_js_runtimes() -> dict[str, dict[str, str]]:
+    """Возвращает JS runtimes для YouTube challenge solving."""
+    return {"deno": {}, "node": {}}
 
 
 def _run_youtube_with_retry(operation_name: str, operation):
@@ -121,9 +127,19 @@ def _resolve_youtube_cookies_file(configured_path: str) -> tuple[str | None, lis
     return None, candidates
 
 
+def _prepare_youtube_cookies_file(cookies_file: str) -> str:
+    """Копирует cookies в рабочий файл, который yt-dlp может обновлять."""
+    temp_dir = _create_temp_folder()
+    working_copy = os.path.join(temp_dir, "youtube_cookies_working.txt")
+    shutil.copyfile(cookies_file, working_copy)
+    return working_copy
+
+
 def _build_ydl_options(**base_options: Any) -> dict[str, Any]:
     """Собирает yt-dlp options и безопасно подключает cookies, если они заданы."""
     ydl_opts = dict(base_options)
+    # yt-dlp по умолчанию включает только Deno, а Docker-образ ставит Node.js.
+    ydl_opts.setdefault("js_runtimes", _default_js_runtimes())
     configured_cookies_file = (
         settings.youtube_cookies_file.strip() if settings.youtube_cookies_file else ""
     )
@@ -145,7 +161,18 @@ def _build_ydl_options(**base_options: Any) -> dict[str, Any]:
             },
         )
 
-    ydl_opts["cookiefile"] = cookies_file
+    try:
+        ydl_opts["cookiefile"] = _prepare_youtube_cookies_file(cookies_file)
+    except OSError as exc:
+        raise YouTubeDownloadError(
+            "Не удалось подготовить файл YouTube cookies",
+            details={
+                "cookies_configured": True,
+                "configured_path": configured_cookies_file,
+                "retryable": False,
+            },
+        ) from exc
+
     logger.info("YouTube cookies enabled: True")
     return ydl_opts
 

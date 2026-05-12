@@ -10,10 +10,14 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./temp:/app/temp
-      # To enable YouTube cookies locally, create ./secrets/cookies_www.youtube.com.txt,
-      # set YOUTUBE_COOKIES_FILE=cookies_www.youtube.com.txt in .env,
-      # and uncomment the read-only mount below.
-      # - ./secrets/cookies_www.youtube.com.txt:/app/secrets/cookies_www.youtube.com.txt:ro
+      # If YOUTUBE_COOKIES_FILE is set to a relative filename, mount that local file
+      # into /app/secrets so cookies are not baked into the Docker image.
+      - type: bind
+        source: ./${YOUTUBE_COOKIES_FILE:-.env.example}
+        target: /app/secrets/${YOUTUBE_COOKIES_FILE:-unused_cookies_placeholder}
+        read_only: true
+        bind:
+          create_host_path: false
 
   frontend:
     build:

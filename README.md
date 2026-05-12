@@ -43,6 +43,10 @@ Backend ищет относительное имя файла в рабочей 
 (Render Secret Files), затем в `/app/secrets` (Docker Compose). На Render файл
 `cookies_www.youtube.com.txt` должен лежать как Secret File по пути:
 
+В Docker Compose укажи относительный путь в `YOUTUBE_COOKIES_FILE`, например
+`cookies_www.youtube.com.txt`. Compose смонтирует этот локальный файл в
+`/app/secrets` read-only, не копируя cookies внутрь Docker image.
+
 ```text
 /etc/secrets/cookies_www.youtube.com.txt
 ```

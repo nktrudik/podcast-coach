@@ -7,6 +7,7 @@ temp/
 *.log
 cookies.txt
 *.cookies
+cookies_*.txt
 secrets/
 .git/
 .pytest_cache/

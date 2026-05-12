@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 openai
-yt-dlp
+yt-dlp[default]
 pydantic-settings
 streamlit
 requests
