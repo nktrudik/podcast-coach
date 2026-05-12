@@ -16,6 +16,35 @@ logger = get_logger(__name__)
 
 RENDER_SECRETS_DIR = "/etc/secrets"
 DOCKER_SECRETS_DIR = "/app/secrets"
+AUDIO_ONLY_FORMAT_SELECTOR = (
+    "bestaudio[acodec!=none][vcodec=none]/"
+    "bestaudio[acodec!=none]/"
+    "worstaudio[acodec!=none]"
+)
+SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR = (
+    f"{AUDIO_ONLY_FORMAT_SELECTOR}/"
+    "worst[acodec!=none]"
+)
+
+
+def _youtube_audio_extractor_args() -> dict[str, dict[str, list[str]]]:
+    """Возвращает YouTube extractor args для более стабильной audio-only выдачи."""
+    return {
+        "youtube": {
+            "player_client": ["tv_downgraded"],
+            "player_skip": ["webpage", "initial_data"],
+        }
+    }
+
+
+def _youtube_fallback_extractor_args() -> dict[str, dict[str, list[str]]]:
+    """Возвращает YouTube extractor args для маленького muxed fallback."""
+    return {
+        "youtube": {
+            "player_client": ["tv_downgraded", "web_safari"],
+            "player_skip": ["webpage"],
+        }
+    }
 
 
 def _default_js_runtimes() -> dict[str, dict[str, str]]:
@@ -295,6 +324,24 @@ def _log_selected_download_format(info: dict[str, Any]) -> None:
         )
 
 
+def _download_youtube_format(
+    normalized_url: str,
+    ydl_opts: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    """Скачивает YouTube-формат и возвращает info + путь к временному файлу."""
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(normalized_url, download=True)
+        if not isinstance(info, dict):
+            raise YouTubeDownloadError(
+                "YouTube вернул некорректные данные после загрузки",
+                details={"youtube_url": normalized_url, "retryable": True},
+            )
+        source_path = ydl.prepare_filename(info)
+
+    _log_selected_download_format(info)
+    return info, source_path
+
+
 def get_video_metadata(youtube_url: str) -> dict[str, Any]:
     """Возвращает метаданные YouTube-видео: title и duration_seconds."""
     normalized_url = _validate_youtube_url(youtube_url)
@@ -357,28 +404,42 @@ def download_audio(youtube_url: str) -> str:
         output_template = os.path.join(temp_dir, "%(id)s.%(ext)s")
 
         ydl_opts = _build_ydl_options(
-            format=(
-                "bestaudio[acodec!=none][vcodec=none]/"
-                "bestaudio[acodec!=none]/"
-                "worstaudio[acodec!=none]"
-            ),
+            format=AUDIO_ONLY_FORMAT_SELECTOR,
             outtmpl=output_template,
+            extractor_args=_youtube_audio_extractor_args(),
             noplaylist=True,
         )
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(normalized_url, download=True)
-                if isinstance(info, dict):
-                    _log_selected_download_format(info)
-                source_path = ydl.prepare_filename(info)
+            info, source_path = _download_youtube_format(normalized_url, ydl_opts)
         except DownloadError as exc:
-            raise _build_download_error(
-                "Не удалось скачать аудио с YouTube",
-                youtube_url=normalized_url,
-                exc=exc,
-                ydl_opts=ydl_opts,
-            ) from exc
+            if not _is_format_unavailable_error(exc):
+                raise _build_download_error(
+                    "Не удалось скачать аудио с YouTube",
+                    youtube_url=normalized_url,
+                    exc=exc,
+                    ydl_opts=ydl_opts,
+                ) from exc
+
+            logger.warning(
+                "YouTube не отдал audio-only формат; пробуем самый маленький "
+                "доступный формат с аудиодорожкой"
+            )
+            fallback_ydl_opts = _build_ydl_options(
+                format=SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR,
+                outtmpl=output_template,
+                extractor_args=_youtube_fallback_extractor_args(),
+                noplaylist=True,
+            )
+            try:
+                info, source_path = _download_youtube_format(normalized_url, fallback_ydl_opts)
+            except DownloadError as fallback_exc:
+                raise _build_download_error(
+                    "Не удалось скачать аудио с YouTube",
+                    youtube_url=normalized_url,
+                    exc=fallback_exc,
+                    ydl_opts=fallback_ydl_opts,
+                ) from fallback_exc
 
         if not source_path or not os.path.isfile(source_path):
             raise YouTubeDownloadError(
