@@ -253,6 +253,48 @@ def _extract_duration_seconds(raw_value: Any) -> int | None:
     return None
 
 
+def _get_selected_download_format(info: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает формат, который yt-dlp фактически выбрал для скачивания."""
+    requested_downloads = info.get("requested_downloads")
+    if isinstance(requested_downloads, list) and requested_downloads:
+        selected = requested_downloads[0]
+        if isinstance(selected, dict):
+            return selected
+
+    return info
+
+
+def _log_selected_download_format(info: dict[str, Any]) -> None:
+    """Логирует выбранный YouTube-формат для диагностики размера загрузки."""
+    selected_format = _get_selected_download_format(info)
+    format_id = selected_format.get("format_id")
+    ext = selected_format.get("ext")
+    acodec = selected_format.get("acodec")
+    vcodec = selected_format.get("vcodec")
+    filesize = selected_format.get("filesize")
+    filesize_approx = selected_format.get("filesize_approx")
+
+    logger.info(
+        "Выбран YouTube format: format_id=%s ext=%s acodec=%s vcodec=%s "
+        "filesize=%s filesize_approx=%s",
+        format_id,
+        ext,
+        acodec,
+        vcodec,
+        filesize,
+        filesize_approx,
+    )
+    if vcodec and vcodec != "none":
+        logger.warning(
+            "Выбран не audio-only YouTube format: format_id=%s ext=%s "
+            "acodec=%s vcodec=%s",
+            format_id,
+            ext,
+            acodec,
+            vcodec,
+        )
+
+
 def get_video_metadata(youtube_url: str) -> dict[str, Any]:
     """Возвращает метаданные YouTube-видео: title и duration_seconds."""
     normalized_url = _validate_youtube_url(youtube_url)
@@ -315,7 +357,11 @@ def download_audio(youtube_url: str) -> str:
         output_template = os.path.join(temp_dir, "%(id)s.%(ext)s")
 
         ydl_opts = _build_ydl_options(
-            format="bestaudio[acodec!=none]/bestaudio/best[acodec!=none]/best",
+            format=(
+                "bestaudio[acodec!=none][vcodec=none]/"
+                "bestaudio[acodec!=none]/"
+                "worstaudio[acodec!=none]"
+            ),
             outtmpl=output_template,
             noplaylist=True,
         )
@@ -323,6 +369,8 @@ def download_audio(youtube_url: str) -> str:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(normalized_url, download=True)
+                if isinstance(info, dict):
+                    _log_selected_download_format(info)
                 source_path = ydl.prepare_filename(info)
         except DownloadError as exc:
             raise _build_download_error(
