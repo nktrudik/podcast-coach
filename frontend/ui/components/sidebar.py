@@ -21,7 +21,7 @@ def render_upload_form(
     client: BackendAPIClient,
     *,
     key_prefix: str,
-    button_label: str = "Загрузить видео",
+    button_label: str = "Add technical video",
 ) -> None:
     """Рендерит форму загрузки YouTube-видео."""
     input_key = f"{key_prefix}_youtube_url"
@@ -58,9 +58,9 @@ def render_upload_block(client: BackendAPIClient) -> None:
         st.session_state.youtube_url = ""
         st.session_state.pending_reset_youtube_url = False
 
-    with st.expander("Добавить видео", expanded=False):
-        st.caption("Вставь ссылку. После обработки откроется чат.")
-        render_upload_form(client, key_prefix="sidebar", button_label="Загрузить видео")
+    with st.expander("Add technical video", expanded=False):
+        st.caption("Paste a technical YouTube video. After processing, start interview practice.")
+        render_upload_form(client, key_prefix="sidebar", button_label="Add technical video")
 
 
 def render_video_tree(client: BackendAPIClient) -> None:
@@ -69,7 +69,7 @@ def render_video_tree(client: BackendAPIClient) -> None:
     sessions = st.session_state.sessions
 
     if not videos:
-        st.info("Список видео пуст. Загрузи первое видео.")
+        st.info("No technical videos yet. Add your first technical video.")
         return
 
     sessions_by_video = group_sessions_by_video(sessions)
@@ -92,7 +92,7 @@ def render_video_tree(client: BackendAPIClient) -> None:
                 st.caption(full_caption)
 
             if st.button(
-                "Выбери видео",
+                "Select video",
                 key=f"choose_video_{video_id}",
                 use_container_width=True,
                 type="primary" if is_selected_video and st.session_state.selected_session_id is None else "secondary",
@@ -101,8 +101,9 @@ def render_video_tree(client: BackendAPIClient) -> None:
                     st.rerun()
 
             if not related_sessions:
-                st.caption("У этого видео пока нет чат-сессий")
+                st.caption("No interview practice sessions yet.")
             else:
+                st.caption("Interview practice sessions")
                 for index, session in enumerate(related_sessions, start=1):
                     session_id = as_positive_int(session.get("id"))
                     if session_id is None:
@@ -119,7 +120,7 @@ def render_video_tree(client: BackendAPIClient) -> None:
                             st.rerun()
 
             if st.button(
-                "Создать чат",
+                "New interview practice",
                 key=f"new_chat_for_video_{video_id}",
                 use_container_width=True,
             ):
@@ -130,14 +131,14 @@ def render_video_tree(client: BackendAPIClient) -> None:
 def render_sidebar(client: BackendAPIClient) -> None:
     """Рендерит sidebar в стиле ChatGPT: управление видео и чатами."""
     with st.sidebar:
-        st.title("English Podcast Coach")
-        st.caption("История чатов")
+        st.title("English Interview Coach")
+        st.caption("IT English interview practice")
 
         render_upload_block(client)
-        if st.button("Обновить", use_container_width=True):
+        if st.button("Refresh", use_container_width=True):
             if refresh_state(client):
                 st.rerun()
 
         st.divider()
-        st.caption("Видео")
+        st.caption("Technical videos")
         render_video_tree(client)

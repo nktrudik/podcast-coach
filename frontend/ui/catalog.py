@@ -29,9 +29,9 @@ def get_video_display_title(video: dict[str, Any], *, fallback_id: bool = True) 
         return youtube_video_id
 
     if fallback_id and video_id is not None:
-        return f"Видео #{video_id}"
+        return f"Technical video #{video_id}"
 
-    return "Видео без названия"
+    return "Untitled technical video"
 
 
 def format_video_label(video: dict[str, Any]) -> str:
@@ -54,7 +54,13 @@ def format_session_label(session: dict[str, Any], position: int | None = None) -
     title = str(session.get("title") or "").strip()
     created_at = str(session.get("created_at") or "").strip()
 
-    base_label = _shorten(title, 44) if title else f"Чат #{position}" if position else "Чат"
+    base_label = (
+        _shorten(title, 44)
+        if title
+        else f"Practice #{position}"
+        if position
+        else "Interview practice"
+    )
     return f"{base_label} · {created_at}" if created_at else base_label
 
 

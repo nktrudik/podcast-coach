@@ -6,8 +6,8 @@ from frontend.ui.state import init_session_state
 from frontend.ui.styles import apply_app_styles
 
 st.set_page_config(
-    page_title="English Podcast Coach",
-    page_icon="🎧",
+    page_title="English Interview Coach for IT",
+    page_icon="💼",
     layout="wide",
     initial_sidebar_state="expanded",
 )

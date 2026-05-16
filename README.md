@@ -1,66 +1,73 @@
-# Podcast Coach
+# English Interview Coach for IT
 
-Podcast Coach - MVP-сервис для практики английской речи по YouTube-подкастам и длинным видео.
+English Interview Coach for IT is an MVP service for practicing spoken technical
+English for IT job interviews with any technical YouTube video.
 
-Стек проекта:
+Upload a video about Python, ML, LLMs, backend, system design, algorithms,
+databases, DevOps, or another technical topic. The service prepares a transcript,
+then an AI coach helps you discuss the topic in English like in an interview:
+it asks interview-style questions, corrects grammar and vocabulary, suggests
+useful phrases, and helps turn your answers into stronger interview-ready
+responses.
+
+## How It Works
+
+1. The user uploads a technical YouTube video.
+2. The backend downloads audio and transcribes it.
+3. The user starts an interview practice session.
+4. The AI coach asks interview-style questions, gives feedback, corrects English,
+   and helps improve the answer structure.
+
+## Stack
 
 - Backend: FastAPI
 - Frontend: Streamlit
-- База данных: PostgreSQL
-- Загрузка YouTube: yt-dlp
-- Конвертация аудио: FFmpeg
+- Database: PostgreSQL
+- YouTube ingestion: yt-dlp
+- Audio conversion: FFmpeg
 - STT/LLM: OpenRouter
-- Конфиг: pydantic-settings через `.env`
+- Config: pydantic-settings via `.env`
+- Runtime/deploy: Docker and Docker Compose
 
-## Что нужно для запуска
+The default database/user names may still use `podcast_coach` for compatibility
+with existing local and Docker environments.
 
-Минимально нужно заполнить `.env`:
+## Required Env
+
+Copy `.env.example` to `.env` and fill the required values:
 
 ```env
 API_KEY=your_openrouter_api_key
 ADMIN_API_KEY=your_admin_key
 ```
 
-Готовый шаблон лежит в `.env.example`.
+Do not commit `.env`, cookies, `storage/`, `temp/`, `secrets/`, PostgreSQL data,
+or FFmpeg binaries.
 
-Важно:
+## YouTube Cookies
 
-- `.env` нельзя коммитить
-- cookies нельзя коммитить
-- `storage/`, `temp/`, `secrets/` нельзя коммитить
-- данные PostgreSQL хранятся в Docker volume `postgres_data`
-- `ffmpeg.exe` и другие бинарники FFmpeg нельзя класть в репозиторий
-
-## YouTube cookies
-
-Если YouTube отвечает `Sign in to confirm you're not a bot`, добавь cookies-файл,
-экспортированный из авторизованного браузера, и укажи его в конфиге:
+If YouTube responds with `Sign in to confirm you're not a bot`, add a cookies
+file exported from an authorized browser and point the config to it:
 
 ```env
 YOUTUBE_COOKIES_FILE=cookies_www.youtube.com.txt
 ```
 
-Backend ищет относительное имя файла в рабочей директории, затем в `/etc/secrets`
-(Render Secret Files), затем в `/app/secrets` (Docker Compose). На Render файл
-`cookies_www.youtube.com.txt` должен лежать как Secret File по пути:
+The backend looks for a relative filename in the working directory, then in
+`/etc/secrets` for Render Secret Files, then in `/app/secrets` for Docker Compose.
 
-В Docker Compose укажи относительный путь в `YOUTUBE_COOKIES_FILE`, например
-`cookies_www.youtube.com.txt`. Compose смонтирует этот локальный файл в
-`/app/secrets` read-only, не копируя cookies внутрь Docker image.
+For Render, upload the file as a Secret File at:
 
 ```text
 /etc/secrets/cookies_www.youtube.com.txt
 ```
 
-Можно также указать абсолютный путь:
+For Docker Compose, keep the local filename in `YOUTUBE_COOKIES_FILE`; Compose
+mounts it into `/app/secrets` read-only without copying it into the image.
 
-```env
-YOUTUBE_COOKIES_FILE=/etc/secrets/cookies_www.youtube.com.txt
-```
+## Local Run Without Docker
 
-## Локальный запуск без Docker
-
-Создать окружение и поставить зависимости:
+Create a virtual environment, install dependencies, and prepare `.env`:
 
 ```powershell
 python -m venv .venv
@@ -68,55 +75,55 @@ python -m venv .venv
 copy .env.example .env
 ```
 
-Для запуска без Docker нужен доступный PostgreSQL. Если база запущена на хосте,
-поменяй `DATABASE_URL` на локальный адрес, например:
+For local run without Docker, PostgreSQL must be available. If the database runs
+on the host, set `DATABASE_URL`, for example:
 
 ```env
 DATABASE_URL=postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach
 ```
 
-Заполнить `.env`, затем запустить backend:
+Start the backend:
 
 ```powershell
 .\.venv\Scripts\python.exe main.py
 ```
 
-В другом терминале запустить frontend:
+Start the frontend in another terminal:
 
 ```powershell
 .\.venv\Scripts\streamlit.exe run frontend/app.py
 ```
 
-Адреса:
+URLs:
 
 - Backend Swagger: http://127.0.0.1:8000/docs
 - Frontend: http://127.0.0.1:8501
 - Health-check: http://127.0.0.1:8000/health
 
-## Запуск через Docker Compose
+## Docker Compose
 
-Создать `.env` из шаблона:
+Create `.env` from the template:
 
 ```bash
 cp .env.example .env
 ```
 
-Заполнить `API_KEY` и `ADMIN_API_KEY`, затем запустить:
+Fill `API_KEY` and `ADMIN_API_KEY`, then run:
 
 ```bash
 docker compose up --build
 ```
 
-Docker Compose поднимет PostgreSQL автоматически и сохранит данные в named volume
-`postgres_data`, поэтому данные не будут пропадать при пересборке backend/frontend.
+Docker Compose starts PostgreSQL automatically and stores data in the named volume
+`postgres_data`, so data survives backend/frontend rebuilds.
 
-После запуска:
+After startup:
 
 - Backend Swagger: http://localhost:8000/docs
 - Frontend: http://localhost:8501
 - Health-check: http://localhost:8000/health
 
-Внутри Docker Compose frontend обращается к backend по адресу:
+Inside Docker Compose, the frontend talks to the backend through:
 
 ```env
 FRONTEND_BACKEND_BASE_URL=http://backend:8000

@@ -65,7 +65,8 @@ def create_app() -> FastAPI:
     setup_logging()
 
     application = FastAPI(
-        title="Podcast Coach API",
+        title="English Interview Coach API",
+        description="API for technical video ingestion and IT English interview practice.",
         lifespan=lifespan,
     )
 

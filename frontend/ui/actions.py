@@ -71,7 +71,7 @@ def bootstrap_state(client: BackendAPIClient) -> None:
         return
 
     try:
-        with st.spinner("Загружаю видео и чаты..."):
+        with st.spinner("Loading technical videos and practice sessions..."):
             sync_state_from_backend(
                 client,
                 preferred_video_id=None,
@@ -152,11 +152,11 @@ def process_video_upload(client: BackendAPIClient, *, state_key: str = "youtube_
     """Обрабатывает YouTube URL, создает или выбирает чат и открывает его."""
     youtube_url = str(st.session_state.get(state_key) or "").strip()
     if not youtube_url:
-        st.error("Укажи ссылку на YouTube перед обработкой")
+        st.error("Укажи ссылку на техническое YouTube-видео перед обработкой")
         return False
 
     try:
-        with st.spinner("Видео обрабатывается..."):
+        with st.spinner("Processing technical video..."):
             video_id = client.upload_video(youtube_url)
             sessions = client.list_sessions()
             existing_sessions = list_sessions_for_video(sessions, video_id)
@@ -194,7 +194,7 @@ def send_chat_message(client: BackendAPIClient, message: str) -> bool:
     video_id = as_positive_int(st.session_state.selected_video_id)
     if session_id is None:
         if video_id is None:
-            st.error("Сначала выбери или загрузи видео")
+            st.error("Сначала выбери или загрузи техническое видео")
             return False
         try:
             session_id = client.start_chat(video_id)
@@ -212,7 +212,7 @@ def send_chat_message(client: BackendAPIClient, message: str) -> bool:
         return False
 
     try:
-        with st.spinner("Ассистент думает..."):
+        with st.spinner("Coach is preparing feedback..."):
             client.send_message(session_id, normalized_message)
             st.session_state.messages = normalize_messages(client.get_session_messages(session_id))
     except BackendAPIError as exc:
