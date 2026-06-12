@@ -128,3 +128,30 @@ Inside Docker Compose, the frontend talks to the backend through:
 ```env
 FRONTEND_BACKEND_BASE_URL=http://backend:8000
 ```
+
+## Render Deploy Notes
+
+Render web services do not have PostgreSQL running on `localhost`. Create or
+attach a Render PostgreSQL database and set the backend service environment
+variable:
+
+```env
+DATABASE_URL=<Render PostgreSQL Internal Database URL>
+```
+
+Use the internal database URL for backend-to-database traffic inside Render. If
+`DATABASE_URL` is missing, the app falls back to the local development default
+`localhost:5432` and startup fails with `Connection refused`.
+
+Also set the required backend variables in Render:
+
+```env
+API_KEY=your_openrouter_api_key
+ADMIN_API_KEY=your_admin_key
+```
+
+If the frontend is deployed as a separate Render service, set:
+
+```env
+FRONTEND_BACKEND_BASE_URL=https://your-backend-service.onrender.com
+```
