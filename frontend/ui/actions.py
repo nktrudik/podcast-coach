@@ -37,8 +37,12 @@ def sync_state_from_backend(
     current_video_id = as_positive_int(st.session_state.selected_video_id)
     current_session_id = as_positive_int(st.session_state.selected_session_id)
 
-    resolved_video_id = preferred_video_id if preferred_video_id is not None else current_video_id
-    resolved_session_id = preferred_session_id if preferred_session_id is not None else current_session_id
+    resolved_video_id = (
+        preferred_video_id if preferred_video_id is not None else current_video_id
+    )
+    resolved_session_id = (
+        preferred_session_id if preferred_session_id is not None else current_session_id
+    )
 
     videos = client.list_videos()
     sessions = client.list_sessions()
@@ -91,8 +95,10 @@ def refresh_state(client: BackendAPIClient) -> bool:
     try:
         sync_state_from_backend(
             client,
-            auto_select_video=as_positive_int(st.session_state.selected_video_id) is not None,
-            auto_select_session=as_positive_int(st.session_state.selected_session_id) is not None,
+            auto_select_video=as_positive_int(st.session_state.selected_video_id)
+            is not None,
+            auto_select_session=as_positive_int(st.session_state.selected_session_id)
+            is not None,
         )
     except BackendAPIError as exc:
         st.error(str(exc))
@@ -148,7 +154,9 @@ def create_session_for_video(client: BackendAPIClient, video_id: int) -> bool:
     return True
 
 
-def process_video_upload(client: BackendAPIClient, *, state_key: str = "youtube_url") -> bool:
+def process_video_upload(
+    client: BackendAPIClient, *, state_key: str = "youtube_url"
+) -> bool:
     """Обрабатывает YouTube URL, создает или выбирает чат и открывает его."""
     youtube_url = str(st.session_state.get(state_key) or "").strip()
     if not youtube_url:
@@ -214,7 +222,9 @@ def send_chat_message(client: BackendAPIClient, message: str) -> bool:
     try:
         with st.spinner("Coach is preparing feedback..."):
             client.send_message(session_id, normalized_message)
-            st.session_state.messages = normalize_messages(client.get_session_messages(session_id))
+            st.session_state.messages = normalize_messages(
+                client.get_session_messages(session_id)
+            )
     except BackendAPIError as exc:
         st.error(str(exc))
         return False

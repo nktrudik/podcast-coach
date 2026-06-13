@@ -57,7 +57,9 @@ class BackendAPIClient:
         try:
             return response.json()
         except ValueError as exc:
-            raise BackendAPIError("Backend вернул ответ в некорректном формате") from exc
+            raise BackendAPIError(
+                "Backend вернул ответ в некорректном формате"
+            ) from exc
 
     def _raise_api_error(self, response: requests.Response) -> None:
         message = f"Backend вернул ошибку {response.status_code}"
@@ -93,7 +95,9 @@ class BackendAPIClient:
 
     def upload_video(self, youtube_url: str) -> int:
         """Запускает обработку YouTube-видео и возвращает id видео."""
-        payload = self._request("POST", "/videos", json_payload={"youtube_url": youtube_url})
+        payload = self._request(
+            "POST", "/videos", json_payload={"youtube_url": youtube_url}
+        )
         video_id = payload.get("video_id") if isinstance(payload, dict) else None
         if not isinstance(video_id, int):
             raise BackendAPIError("Backend вернул некорректный video_id")
@@ -115,7 +119,9 @@ class BackendAPIClient:
 
     def start_chat(self, video_id: int) -> int:
         """Создает новую чат-сессию и возвращает session_id."""
-        payload = self._request("POST", "/chat/start", json_payload={"video_id": video_id})
+        payload = self._request(
+            "POST", "/chat/start", json_payload={"video_id": video_id}
+        )
         session_id = payload.get("session_id") if isinstance(payload, dict) else None
         if not isinstance(session_id, int):
             raise BackendAPIError("Backend вернул некорректный session_id")

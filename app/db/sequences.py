@@ -1,20 +1,23 @@
-from psycopg import Connection
+from typing import Any
+
+from psycopg import Connection, sql
 
 _SEQUENCE_TABLES = {"videos", "chat_sessions", "messages"}
 
 
-def reset_sequence(conn: Connection, table_name: str) -> None:
+def reset_sequence(conn: Connection[Any], table_name: str) -> None:
     """Синхронизирует PostgreSQL identity sequence с текущим max id таблицы."""
     if table_name not in _SEQUENCE_TABLES:
         raise ValueError(f"Недопустимая таблица для сброса sequence: {table_name}")
 
-    conn.execute(
-        f"""
+    query = sql.SQL(
+        """
         SELECT setval(
             pg_get_serial_sequence(%s, 'id'),
-            COALESCE((SELECT MAX(id) FROM {table_name}), 1),
-            (SELECT COUNT(*) FROM {table_name}) > 0
+            COALESCE((SELECT MAX(id) FROM {table}), 1),
+            (SELECT COUNT(*) FROM {table}) > 0
         )
-        """,
-        (table_name,),
-    )
+        """
+    ).format(table=sql.Identifier(table_name))
+
+    conn.execute(query, (table_name,))

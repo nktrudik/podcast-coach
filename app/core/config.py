@@ -10,7 +10,9 @@ class Settings(BaseSettings):
     stt_model_name: str = "mistralai/voxtral-small-24b-2507"
     llm_model_name: str = "inclusionai/ring-2.6-1t:free"
     base_url: str = "https://openrouter.ai/api/v1"
-    database_url: str = "postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach"
+    database_url: str = (
+        "postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach"
+    )
     log_level: str = "INFO"
     log_file_path: str = "./storage/logs/backend.log"
     external_request_timeout_seconds: float = Field(default=45.0, gt=0)
@@ -25,9 +27,7 @@ class Settings(BaseSettings):
     youtube_retry_delay_seconds: float = Field(default=10.0, ge=0)
     uploaded_videos_limit: int = Field(default=5, ge=1, le=100)
     chat_sessions_per_video_limit: int = Field(default=5, ge=1, le=50)
-    youtube_url: str = (
-        "https://www.youtube.com/watch?v=gO1Cm_A_pO8&list=PLZwUC1tATQdzM24SU_17Qox5-a20fBP_T"
-    )
+    youtube_url: str = "https://www.youtube.com/watch?v=gO1Cm_A_pO8&list=PLZwUC1tATQdzM24SU_17Qox5-a20fBP_T"
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
 
@@ -38,4 +38,4 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

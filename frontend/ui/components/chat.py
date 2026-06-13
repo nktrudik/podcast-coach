@@ -27,11 +27,26 @@ EXAMPLE_COMMANDS = [
     "Give me useful vocabulary from this video.",
 ]
 STARTER_ACTIONS = [
-    ("Start mock interview", "Start a mock interview based on this video. Ask one question at a time."),
-    ("Ask me 5 questions", "Ask me 5 interview questions about this video, one question at a time."),
-    ("Extract interview vocabulary", "Extract useful interview vocabulary from this video."),
-    ("Help me explain this topic", "Help me explain the main topic of this video in English."),
-    ("Correct my answer", "I want to practice answer improvement. Ask me for an answer, then correct it."),
+    (
+        "Start mock interview",
+        "Start a mock interview based on this video. Ask one question at a time.",
+    ),
+    (
+        "Ask me 5 questions",
+        "Ask me 5 interview questions about this video, one question at a time.",
+    ),
+    (
+        "Extract interview vocabulary",
+        "Extract useful interview vocabulary from this video.",
+    ),
+    (
+        "Help me explain this topic",
+        "Help me explain the main topic of this video in English.",
+    ),
+    (
+        "Correct my answer",
+        "I want to practice answer improvement. Ask me for an answer, then correct it.",
+    ),
 ]
 
 
@@ -44,7 +59,9 @@ def render_messages() -> None:
             st.markdown(content)
 
 
-def _render_header(selected_video_id: int | None, selected_session_id: int | None) -> None:
+def _render_header(
+    selected_video_id: int | None, selected_session_id: int | None
+) -> None:
     """Рендерит верхнюю область активного видео и чата."""
     st.title(APP_TITLE)
 
@@ -90,7 +107,9 @@ def _render_starter_actions(client: BackendAPIClient) -> None:
     columns = st.columns(2)
     for index, (label, message) in enumerate(STARTER_ACTIONS):
         with columns[index % 2]:
-            if st.button(label, key=f"starter_action_{index}", use_container_width=True):
+            if st.button(
+                label, key=f"starter_action_{index}", use_container_width=True
+            ):
                 if send_chat_message(client, message):
                     st.rerun()
 
@@ -100,25 +119,39 @@ def _render_onboarding(client: BackendAPIClient) -> None:
     st.caption(APP_TITLE)
     st.title(WELCOME_TITLE)
     st.subheader(WELCOME_SUBTITLE)
-    st.info("Выбери техническое видео слева или загрузи новое, чтобы начать interview practice.")
+    st.info(
+        "Выбери техническое видео слева или загрузи новое, чтобы начать interview practice."
+    )
 
-    st.markdown("1. Add a technical YouTube video: Python, ML, LLMs, backend, system design, algorithms, databases, DevOps.")
+    st.markdown(
+        "1. Add a technical YouTube video: Python, ML, LLMs, backend, system design, algorithms, databases, DevOps."
+    )
     st.markdown("2. Wait while the backend extracts audio and prepares the transcript.")
-    st.markdown("3. Discuss the video with an AI coach in English, like in an IT interview.")
-    st.markdown("4. Get interview-style questions, English corrections, useful phrases, and stronger answers.")
+    st.markdown(
+        "3. Discuss the video with an AI coach in English, like in an IT interview."
+    )
+    st.markdown(
+        "4. Get interview-style questions, English corrections, useful phrases, and stronger answers."
+    )
 
     _render_example_commands()
 
     st.divider()
-    render_upload_form(client, key_prefix="main", button_label="Загрузить техническое видео")
+    render_upload_form(
+        client, key_prefix="main", button_label="Загрузить техническое видео"
+    )
 
 
-def _render_video_without_chat(client: BackendAPIClient, selected_video_id: int | None) -> None:
+def _render_video_without_chat(
+    client: BackendAPIClient, selected_video_id: int | None
+) -> None:
     """Показывает понятное состояние, когда активный чат не выбран."""
     if selected_video_id is None:
         return
 
-    related_sessions = list_sessions_for_video(st.session_state.sessions, selected_video_id)
+    related_sessions = list_sessions_for_video(
+        st.session_state.sessions, selected_video_id
+    )
 
     with st.container(border=True):
         if related_sessions:
@@ -140,11 +173,15 @@ def _render_video_without_chat(client: BackendAPIClient, selected_video_id: int 
                         st.rerun()
         else:
             st.subheader("No practice sessions for this video yet")
-            st.caption("Создай practice session, чтобы потренироваться объяснять тему видео на английском.")
+            st.caption(
+                "Создай practice session, чтобы потренироваться объяснять тему видео на английском."
+            )
 
         st.divider()
         _render_example_commands()
-        button_label = "New interview practice" if related_sessions else "Start interview practice"
+        button_label = (
+            "New interview practice" if related_sessions else "Start interview practice"
+        )
         if st.button(button_label, type="primary", use_container_width=True):
             if create_session_for_video(client, selected_video_id):
                 st.rerun()

@@ -26,7 +26,9 @@ def count_chat_sessions_by_video(video_id: int) -> int:
                 (validated_video_id,),
             ).fetchone()
     except Error as exc:
-        raise DatabaseOperationError("Не удалось посчитать чат-сессии по видео") from exc
+        raise DatabaseOperationError(
+            "Не удалось посчитать чат-сессии по видео"
+        ) from exc
 
     total = row["total"] if row else 0
     return int(total) if isinstance(total, int) else 0
@@ -34,7 +36,9 @@ def count_chat_sessions_by_video(video_id: int) -> int:
 
 def create_chat_session(video_id: int | None = None, title: str | None = None) -> int:
     """Создает чат-сессию и возвращает ее идентификатор."""
-    normalized_video_id = None if video_id is None else validate_positive_int(video_id, "video_id")
+    normalized_video_id = (
+        None if video_id is None else validate_positive_int(video_id, "video_id")
+    )
     normalized_title = validate_optional_text(title, "title")
 
     try:
@@ -47,6 +51,8 @@ def create_chat_session(video_id: int | None = None, title: str | None = None) -
                 """,
                 (normalized_video_id, normalized_title),
             ).fetchone()
+            if row is None:
+                raise DatabaseOperationError("База данных не вернула id чат-сессии")
             return int(row["id"])
     except Error as exc:
         raise DatabaseOperationError("Не удалось создать чат-сессию") from exc

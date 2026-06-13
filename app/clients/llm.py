@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, TypeAlias
 
 from openai import APIConnectionError, APITimeoutError, OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 from app.clients.errors import (
     ClientValidationError,
@@ -12,6 +13,8 @@ from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
+MemoryMessage: TypeAlias = dict[str, str]
+_ALLOWED_MEMORY_ROLES = {"user", "assistant", "system"}
 
 
 def _create_client() -> OpenAI:
@@ -22,12 +25,23 @@ def _create_client() -> OpenAI:
     )
 
 
-def _to_memory_message(message: Any) -> dict[str, Any]:
+def _to_memory_message(content: str) -> MemoryMessage:
     """Приводит ответ модели к формату сообщений истории."""
     return {
         "role": "assistant",
-        "content": message.content,
+        "content": content,
     }
+
+
+def _to_chat_message(message: MemoryMessage) -> ChatCompletionMessageParam:
+    """Приводит сообщение истории к типизированному OpenAI payload."""
+    content = message["content"]
+    role = message["role"]
+    if role == "system":
+        return {"role": "system", "content": content}
+    if role == "assistant":
+        return {"role": "assistant", "content": content}
+    return {"role": "user", "content": content}
 
 
 def _extract_text_from_content(content: Any) -> str:
@@ -45,9 +59,9 @@ def _extract_text_from_content(content: Any) -> str:
                 continue
 
             if isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
+                dict_text = item.get("text")
+                if isinstance(dict_text, str) and dict_text.strip():
+                    parts.append(dict_text.strip())
                 continue
 
             text_attr = getattr(item, "text", None)
@@ -59,7 +73,7 @@ def _extract_text_from_content(content: Any) -> str:
     return ""
 
 
-def _validate_text(value: str, field_name: str) -> str:
+def _validate_text(value: Any, field_name: str) -> str:
     """Проверяет, что текстовое поле непустое."""
     if not isinstance(value, str):
         raise ClientValidationError(f"Поле {field_name} должно быть строкой")
@@ -70,23 +84,29 @@ def _validate_text(value: str, field_name: str) -> str:
     return normalized_value
 
 
-def _validate_memory(memory: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def _validate_memory(memory: list[dict[str, Any]] | None) -> list[MemoryMessage]:
     """Проверяет историю сообщений перед отправкой в LLM."""
     if memory is None:
         return []
     if not isinstance(memory, list):
         raise ClientValidationError("Параметр memory должен быть списком")
 
-    validated_memory: list[dict[str, Any]] = []
+    validated_memory: list[MemoryMessage] = []
     for index, item in enumerate(memory):
         if not isinstance(item, dict):
             raise ClientValidationError(f"Элемент memory[{index}] должен быть объектом")
-        role = item.get("role")
-        content = item.get("content")
+        role = _validate_text(item.get("role"), f"memory[{index}].role").lower()
+        if role not in _ALLOWED_MEMORY_ROLES:
+            raise ClientValidationError(
+                f"Поле memory[{index}].role должно быть user, assistant или system"
+            )
+
         validated_memory.append(
             {
-                "role": _validate_text(role, f"memory[{index}].role"),
-                "content": _validate_text(content, f"memory[{index}].content"),
+                "role": role,
+                "content": _validate_text(
+                    item.get("content"), f"memory[{index}].content"
+                ),
             }
         )
 
@@ -97,7 +117,7 @@ def ask_llm(
     system_prompt: str,
     message: str,
     memory: list[dict[str, Any]] | None = None,
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[MemoryMessage]]:
     """Отправляет запрос в LLM и возвращает ответ вместе с обновленной историей."""
     validated_system_prompt = _validate_text(system_prompt, "system_prompt")
     validated_message = _validate_text(message, "message")
@@ -106,17 +126,17 @@ def ask_llm(
     client = _create_client()
     logger.info("Отправка запроса в LLM")
 
-    user_message = {
+    user_message: MemoryMessage = {
         "role": "user",
         "content": validated_message,
     }
-    messages = [
+    messages: list[ChatCompletionMessageParam] = [
         {
             "role": "system",
             "content": validated_system_prompt,
         },
-        *validated_memory,
-        user_message,
+        *[_to_chat_message(item) for item in validated_memory],
+        _to_chat_message(user_message),
     ]
 
     try:
@@ -165,7 +185,7 @@ def ask_llm(
         )
         raise LLMRequestError("Языковая модель вернула пустой ответ")
 
-    assistant_message = _to_memory_message(assistant_response)
+    assistant_message = _to_memory_message(response_content)
     logger.info("Ответ от LLM успешно получен")
 
     return response_content, [*validated_memory, user_message, assistant_message]

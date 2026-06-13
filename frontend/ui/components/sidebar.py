@@ -59,8 +59,12 @@ def render_upload_block(client: BackendAPIClient) -> None:
         st.session_state.pending_reset_youtube_url = False
 
     with st.expander("Add technical video", expanded=False):
-        st.caption("Paste a technical YouTube video. After processing, start interview practice.")
-        render_upload_form(client, key_prefix="sidebar", button_label="Add technical video")
+        st.caption(
+            "Paste a technical YouTube video. After processing, start interview practice."
+        )
+        render_upload_form(
+            client, key_prefix="sidebar", button_label="Add technical video"
+        )
 
 
 def render_video_tree(client: BackendAPIClient) -> None:
@@ -95,7 +99,9 @@ def render_video_tree(client: BackendAPIClient) -> None:
                 "Select video",
                 key=f"choose_video_{video_id}",
                 use_container_width=True,
-                type="primary" if is_selected_video and st.session_state.selected_session_id is None else "secondary",
+                type="primary"
+                if is_selected_video and st.session_state.selected_session_id is None
+                else "secondary",
             ):
                 if select_video(client, video_id):
                     st.rerun()
@@ -109,7 +115,9 @@ def render_video_tree(client: BackendAPIClient) -> None:
                     if session_id is None:
                         continue
 
-                    is_selected_session = session_id == st.session_state.selected_session_id
+                    is_selected_session = (
+                        session_id == st.session_state.selected_session_id
+                    )
                     if st.button(
                         format_session_label(session, index),
                         key=f"choose_session_{session_id}",

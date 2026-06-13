@@ -21,8 +21,11 @@ async def lifespan(_: FastAPI):
     logger.info("Остановка приложения")
 
 
-async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
+async def _handle_app_error(request: Request, exc: Exception) -> JSONResponse:
     """Формирует ответ для контролируемых ошибок приложения."""
+    if not isinstance(exc, AppError):
+        return await _handle_unexpected_error(request, exc)
+
     logger.warning(
         "Обработана ошибка приложения: path=%s module=%s code=%s details=%s",
         request.url.path,
@@ -33,8 +36,11 @@ async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=exc.to_response())
 
 
-async def _handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def _handle_validation_error(request: Request, exc: Exception) -> JSONResponse:
     """Формирует единый ответ при ошибке валидации входных данных."""
+    if not isinstance(exc, RequestValidationError):
+        return await _handle_unexpected_error(request, exc)
+
     logger.warning("Ошибка валидации запроса: path=%s", request.url.path)
     return JSONResponse(
         status_code=422,

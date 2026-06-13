@@ -1,4 +1,4 @@
-from yt_dlp.extractor.youtube import YoutubeIE
+from yt_dlp.extractor.youtube import YoutubeIE  # type: ignore[import-untyped]
 
 from app.core.errors import ValidationAppError
 

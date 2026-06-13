@@ -1,3 +1,5 @@
+from typing import Any
+
 from psycopg import Connection, connect
 from psycopg.rows import dict_row
 
@@ -13,7 +15,7 @@ def _database_url() -> str:
     return database_url
 
 
-def get_connection() -> Connection:
+def get_connection() -> Connection[dict[str, Any]]:
     """Creates a PostgreSQL connection returning rows as dictionaries."""
     try:
         return connect(_database_url(), row_factory=dict_row)

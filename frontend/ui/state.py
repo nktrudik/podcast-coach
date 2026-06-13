@@ -5,7 +5,7 @@ import streamlit as st
 
 def init_session_state() -> None:
     """Инициализирует состояние интерфейса с безопасными значениями по умолчанию."""
-    defaults = {
+    defaults: dict[str, Any] = {
         "selected_video_id": None,
         "selected_session_id": None,
         "messages": [],

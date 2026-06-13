@@ -129,7 +129,9 @@ def start_chat(
         )
 
     session_id = create_chat_session(payload.video_id)
-    logger.info("Создана чат-сессия: session_id=%s, video_id=%s", session_id, payload.video_id)
+    logger.info(
+        "Создана чат-сессия: session_id=%s, video_id=%s", session_id, payload.video_id
+    )
 
     return StartChatResponse(session_id=session_id)
 
@@ -180,7 +182,9 @@ def get_sessions() -> list[ChatSessionItem]:
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageItem])
-def get_session_messages(session_id: Annotated[int, Path(gt=0)]) -> list[ChatMessageItem]:
+def get_session_messages(
+    session_id: Annotated[int, Path(gt=0)],
+) -> list[ChatMessageItem]:
     """Возвращает историю сообщений конкретной чат-сессии."""
     session = get_chat_session(session_id)
     if not session:

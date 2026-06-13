@@ -1,0 +1,51 @@
+#-------------------------------------------
+# English podcast coach 
+#
+# Created by nktrudik
+#-------------------------------------------
+
+
+stages:
+    - quality
+    - build
+
+
+quality:
+    stage: quality
+    image: python:3.13-slim
+    before_script:
+        - pip install poetry
+        - poetry install --with dev --no-interaction --no-ansi
+    script:
+        - poetry run ruff format --check .
+        - poetry run ruff check .
+        - poetry run mypy .
+        - poetry run bandit -r app frontend
+
+
+build_backend:
+  stage: build
+  image: docker:27.5.1
+  services:
+    - docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build -f Dockerfile.backend -t podcast-coach-backend:$CI_COMMIT_SHORT_SHA .
+
+
+build_frontend:
+  stage: build
+  image: docker:27.5.1
+  services:
+    - docker:27.5.1-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build -f Dockerfile.frontend -t podcast-coach-frontend:$CI_COMMIT_SHORT_SHA .
+
+
+
+

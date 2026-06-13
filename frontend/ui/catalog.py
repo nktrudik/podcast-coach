@@ -64,7 +64,9 @@ def format_session_label(session: dict[str, Any], position: int | None = None) -
     return f"{base_label} · {created_at}" if created_at else base_label
 
 
-def find_video(videos: list[dict[str, Any]], video_id: int | None) -> dict[str, Any] | None:
+def find_video(
+    videos: list[dict[str, Any]], video_id: int | None
+) -> dict[str, Any] | None:
     """Возвращает видео из списка по id."""
     if video_id is None:
         return None
@@ -111,7 +113,9 @@ def list_sessions_for_video(
     ]
 
 
-def group_sessions_by_video(sessions: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+def group_sessions_by_video(
+    sessions: list[dict[str, Any]],
+) -> dict[int, list[dict[str, Any]]]:
     """Группирует чат-сессии по идентификатору видео."""
     grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for session in sessions:
@@ -132,7 +136,11 @@ def resolve_selection(
     auto_select_session: bool = True,
 ) -> tuple[int | None, int | None]:
     """Определяет валидную пару выбранных видео и сессии из данных backend."""
-    video_ids = [video_id for video in videos if (video_id := as_positive_int(video.get("id"))) is not None]
+    video_ids = [
+        video_id
+        for video in videos
+        if (video_id := as_positive_int(video.get("id"))) is not None
+    ]
     session_by_id = {
         session_id: session
         for session in sessions
@@ -140,10 +148,14 @@ def resolve_selection(
     }
 
     selected_video_id = preferred_video_id if preferred_video_id in video_ids else None
-    selected_session_id = preferred_session_id if preferred_session_id in session_by_id else None
+    selected_session_id = (
+        preferred_session_id if preferred_session_id in session_by_id else None
+    )
 
     if selected_session_id is not None:
-        session_video_id = as_positive_int(session_by_id[selected_session_id].get("video_id"))
+        session_video_id = as_positive_int(
+            session_by_id[selected_session_id].get("video_id")
+        )
         if session_video_id in video_ids:
             selected_video_id = session_video_id
 

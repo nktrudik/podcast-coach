@@ -1,11 +1,11 @@
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 import time
 from typing import Any
 
-import yt_dlp
-from yt_dlp.utils import DownloadError
+import yt_dlp  # type: ignore[import-untyped]
+from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
 
 from app.clients.errors import ClientValidationError, YouTubeDownloadError
 from app.core.config import settings
@@ -22,8 +22,7 @@ AUDIO_ONLY_FORMAT_SELECTOR = (
     "worstaudio[acodec!=none]"
 )
 SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR = (
-    f"{AUDIO_ONLY_FORMAT_SELECTOR}/"
-    "worst[acodec!=none]"
+    f"{AUDIO_ONLY_FORMAT_SELECTOR}/worst[acodec!=none]"
 )
 
 
@@ -164,6 +163,18 @@ def _prepare_youtube_cookies_file(cookies_file: str) -> str:
     return working_copy
 
 
+def _resolve_ffmpeg_path() -> str:
+    """Находит исполняемый файл FFmpeg и возвращает абсолютный путь."""
+    ffmpeg_path = shutil.which("ffmpeg")
+    if not ffmpeg_path:
+        raise YouTubeDownloadError(
+            "FFmpeg не найден в PATH",
+            details={"retryable": False},
+        )
+
+    return os.path.abspath(ffmpeg_path)
+
+
 def _build_ydl_options(**base_options: Any) -> dict[str, Any]:
     """Собирает yt-dlp options и безопасно подключает cookies, если они заданы."""
     ydl_opts = dict(base_options)
@@ -256,7 +267,9 @@ def _validate_youtube_url(youtube_url: str) -> str:
     try:
         canonical_url, _ = normalize_youtube_url(normalized_url)
     except Exception as exc:
-        raise ClientValidationError("Поддерживаются только корректные ссылки YouTube") from exc
+        raise ClientValidationError(
+            "Поддерживаются только корректные ссылки YouTube"
+        ) from exc
 
     return canonical_url
 
@@ -372,7 +385,11 @@ def get_video_metadata(youtube_url: str) -> dict[str, Any]:
             )
 
         title_raw = info.get("title")
-        title = title_raw.strip() if isinstance(title_raw, str) and title_raw.strip() else None
+        title = (
+            title_raw.strip()
+            if isinstance(title_raw, str) and title_raw.strip()
+            else None
+        )
         duration_seconds = _extract_duration_seconds(info.get("duration"))
 
         return {
@@ -432,7 +449,9 @@ def download_audio(youtube_url: str) -> str:
                 noplaylist=True,
             )
             try:
-                info, source_path = _download_youtube_format(normalized_url, fallback_ydl_opts)
+                info, source_path = _download_youtube_format(
+                    normalized_url, fallback_ydl_opts
+                )
             except DownloadError as fallback_exc:
                 raise _build_download_error(
                     "Не удалось скачать аудио с YouTube",
@@ -454,15 +473,22 @@ def download_audio(youtube_url: str) -> str:
                 details={"youtube_url": normalized_url, "retryable": False},
             )
 
+        ffmpeg_path = _resolve_ffmpeg_path()
         mp3_path = os.path.join(temp_dir, f"{video_id}.mp3")
         try:
-            subprocess.run(
+            subprocess.run(  # nosec B603
                 [
-                    "ffmpeg", "-y", "-i", source_path,
-                    "-vn",           # убираем видеодорожку, если вдруг осталась
-                    "-ac", "1",      # моно (речь — 1 канал достаточно)
-                    "-ar", "16000",  # 16 kHz — стандарт для ASR-моделей
-                    "-b:a", "48k",   # 48 kbps — достаточно для разборчивости речи
+                    ffmpeg_path,
+                    "-y",
+                    "-i",
+                    source_path,
+                    "-vn",  # убираем видеодорожку, если вдруг осталась
+                    "-ac",
+                    "1",  # моно (речь — 1 канал достаточно)
+                    "-ar",
+                    "16000",  # 16 kHz — стандарт для ASR-моделей
+                    "-b:a",
+                    "48k",  # 48 kbps — достаточно для разборчивости речи
                     mp3_path,
                 ],
                 check=True,
@@ -472,7 +498,10 @@ def download_audio(youtube_url: str) -> str:
         except subprocess.CalledProcessError as exc:
             raise YouTubeDownloadError(
                 "Ошибка конвертации аудио в mp3",
-                details={"stderr": (exc.stderr or "").strip()[:500], "retryable": False},
+                details={
+                    "stderr": (exc.stderr or "").strip()[:500],
+                    "retryable": False,
+                },
             ) from exc
 
         if not os.path.isfile(mp3_path):
@@ -481,7 +510,9 @@ def download_audio(youtube_url: str) -> str:
                 details={"youtube_url": normalized_url, "retryable": False},
             )
 
-        if os.path.abspath(source_path) != os.path.abspath(mp3_path) and os.path.exists(source_path):
+        if os.path.abspath(source_path) != os.path.abspath(mp3_path) and os.path.exists(
+            source_path
+        ):
             os.remove(source_path)
 
         logger.info("Аудио успешно загружено и конвертировано")

@@ -38,15 +38,24 @@ def save_video_transcript(
                 VALUES (%s, %s, %s, %s)
                 RETURNING id
                 """,
-                (normalized_url, normalized_video_id, normalized_title, normalized_transcript),
+                (
+                    normalized_url,
+                    normalized_video_id,
+                    normalized_title,
+                    normalized_transcript,
+                ),
             ).fetchone()
+            if row is None:
+                raise DatabaseOperationError("База данных не вернула id видео")
             return int(row["id"])
     except IntegrityError:
         video = get_video_by_youtube_video_id(normalized_video_id)
         if video:
             video_id = int(video["id"])
             existing_title = video.get("title")
-            has_existing_title = isinstance(existing_title, str) and bool(existing_title.strip())
+            has_existing_title = isinstance(existing_title, str) and bool(
+                existing_title.strip()
+            )
             if normalized_title and not has_existing_title:
                 update_video_title(video_id, normalized_title)
             return video_id
@@ -99,7 +108,9 @@ def get_video_by_youtube_video_id(youtube_video_id: str) -> dict[str, Any] | Non
                 (normalized_video_id,),
             ).fetchone()
     except Error as exc:
-        raise DatabaseOperationError("Не удалось получить видео по youtube_video_id") from exc
+        raise DatabaseOperationError(
+            "Не удалось получить видео по youtube_video_id"
+        ) from exc
 
     return dict(row) if row else None
 

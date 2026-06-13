@@ -24,7 +24,9 @@ def add_message(
     normalized_content = validate_non_empty_text(content, "content")
 
     if normalized_role not in _ALLOWED_ROLES:
-        raise DatabaseValidationError("Роль сообщения должна быть user, assistant или system")
+        raise DatabaseValidationError(
+            "Роль сообщения должна быть user, assistant или system"
+        )
 
     try:
         with get_connection() as conn:
@@ -36,6 +38,8 @@ def add_message(
                 """,
                 (validated_session_id, normalized_role, normalized_content),
             ).fetchone()
+            if row is None:
+                raise DatabaseOperationError("База данных не вернула id сообщения")
             return int(row["id"])
     except Error as exc:
         raise DatabaseOperationError("Не удалось сохранить сообщение") from exc

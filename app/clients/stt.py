@@ -1,8 +1,9 @@
 import base64
 import os
-from typing import Any
+from typing import Any, cast
 
 from openai import APIConnectionError, APITimeoutError, OpenAI, RateLimitError
+from openai.types.chat import ChatCompletionMessageParam
 
 from app.clients.errors import ClientValidationError, STTRequestError, STTTimeoutError
 from app.clients.retry import run_with_retry
@@ -89,9 +90,9 @@ def _extract_text_from_content(content: Any) -> str:
                 continue
 
             if isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str) and text.strip():
-                    parts.append(text.strip())
+                dict_text = item.get("text")
+                if isinstance(dict_text, str) and dict_text.strip():
+                    parts.append(dict_text.strip())
                 continue
 
             text_attr = getattr(item, "text", None)
@@ -103,7 +104,9 @@ def _extract_text_from_content(content: Any) -> str:
     return ""
 
 
-def transcribe_audio(audio_path: str, prompt: str = "Send transcript in English") -> str:
+def transcribe_audio(
+    audio_path: str, prompt: str = "Send transcript in English"
+) -> str:
     """Отправляет аудио во внешний STT-сервис и возвращает транскрипт."""
     normalized_path = _validate_audio_path(audio_path)
     normalized_prompt = _validate_prompt(prompt)
@@ -116,6 +119,27 @@ def transcribe_audio(audio_path: str, prompt: str = "Send transcript in English"
 
     audio_data = _read_audio_base64(normalized_path)
     audio_format = _detect_audio_format(normalized_path)
+    messages = [
+        cast(
+            ChatCompletionMessageParam,
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": normalized_prompt,
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": audio_data,
+                            "format": audio_format,
+                        },
+                    },
+                ],
+            },
+        )
+    ]
 
     try:
         completion = run_with_retry(
@@ -126,24 +150,7 @@ def transcribe_audio(audio_path: str, prompt: str = "Send transcript in English"
                 },
                 extra_body={},
                 model=settings.stt_model_name,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": normalized_prompt,
-                            },
-                            {
-                                "type": "input_audio",
-                                "input_audio": {
-                                    "data": audio_data,
-                                    "format": audio_format,
-                                },
-                            },
-                        ],
-                    }
-                ],
+                messages=messages,
                 timeout=settings.external_request_timeout_seconds,
             ),
             operation_name="STT",

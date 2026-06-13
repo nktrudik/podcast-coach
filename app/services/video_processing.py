@@ -77,10 +77,16 @@ def process_video(youtube_url: str) -> int:
 
         metadata = get_video_metadata(normalized_url)
         video_title_raw = metadata.get("title")
-        video_title = video_title_raw if isinstance(video_title_raw, str) and video_title_raw.strip() else None
+        video_title = (
+            video_title_raw
+            if isinstance(video_title_raw, str) and video_title_raw.strip()
+            else None
+        )
 
         duration_seconds_raw = metadata.get("duration_seconds")
-        duration_seconds = duration_seconds_raw if isinstance(duration_seconds_raw, int) else None
+        duration_seconds = (
+            duration_seconds_raw if isinstance(duration_seconds_raw, int) else None
+        )
         if duration_seconds is None:
             raise ServiceValidationError(
                 "Не удалось определить длительность ролика. Попробуй другую ссылку или повтори позже.",
@@ -118,7 +124,9 @@ def process_video(youtube_url: str) -> int:
         )
 
         if video_id <= 0:
-            raise VideoProcessingError("Получен некорректный идентификатор видео после сохранения")
+            raise VideoProcessingError(
+                "Получен некорректный идентификатор видео после сохранения"
+            )
 
         logger.info("Видео успешно обработано и сохранено")
         return video_id
