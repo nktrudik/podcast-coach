@@ -10,6 +10,7 @@ it asks interview-style questions, corrects grammar and vocabulary, suggests
 useful phrases, and helps turn your answers into stronger interview-ready
 responses.
 
+
 ## How It Works
 
 1. The user uploads a technical YouTube video.

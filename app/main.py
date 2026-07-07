@@ -9,7 +9,6 @@ from app.core.errors import AppError
 from app.core.logger import get_logger, setup_logging
 from app.db.migrations import init_db
 
-
 logger = get_logger(__name__)
 
 

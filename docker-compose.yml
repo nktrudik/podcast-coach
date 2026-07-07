@@ -48,5 +48,6 @@ services:
       FRONTEND_BACKEND_BASE_URL: http://backend:8000
       FRONTEND_REQUEST_TIMEOUT_SECONDS: ${FRONTEND_REQUEST_TIMEOUT_SECONDS:-180}
 
+
 volumes:
   postgres_data:

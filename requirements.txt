@@ -6,4 +6,3 @@ pydantic-settings
 psycopg[binary]
 streamlit
 requests
-pytest
