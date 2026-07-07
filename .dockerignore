@@ -14,6 +14,7 @@ secrets/
 .mypy_cache/
 .ruff_cache/
 
+
 # Local ffmpeg binaries must not be copied into images.
 ffmpeg
 ffmpeg.exe

@@ -29,8 +29,6 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./temp:/app/temp
-      # If YOUTUBE_COOKIES_FILE is set to a relative filename, mount that local file
-      # into /app/secrets so cookies are not baked into the Docker image.
       - type: bind
         source: ./${YOUTUBE_COOKIES_FILE:-.env.example}
         target: /app/secrets/${YOUTUBE_COOKIES_FILE:-unused_cookies_placeholder}
