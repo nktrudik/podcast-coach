@@ -2,7 +2,7 @@ from app.core.errors import AppError
 
 
 class DatabaseError(AppError):
-    """Базовая ошибка слоя данных."""
+    """Base data layer error."""
 
     module = "db"
     error_code = "db_error"
@@ -10,14 +10,14 @@ class DatabaseError(AppError):
 
 
 class DatabaseValidationError(DatabaseError):
-    """Ошибка валидации входных данных для запросов в БД."""
+    """Validation error for database operation inputs."""
 
     error_code = "db_validation_error"
     status_code = 400
 
 
 class DatabaseOperationError(DatabaseError):
-    """Ошибка выполнения SQL-операции."""
+    """SQL operation execution error."""
 
     error_code = "db_operation_error"
     status_code = 500

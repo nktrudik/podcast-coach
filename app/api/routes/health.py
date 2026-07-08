@@ -9,7 +9,7 @@ logger = get_logger(__name__)
 
 @router.get("/health")
 def health_check() -> dict[str, str]:
-    """Проверяет доступность приложения и PostgreSQL."""
+    """Check application and PostgreSQL availability."""
     try:
         with get_connection() as conn:
             conn.execute("SELECT 1").fetchone()
@@ -20,4 +20,4 @@ def health_check() -> dict[str, str]:
             detail={"status": "error", "database": "unavailable"},
         ) from exc
 
-    return {"status": "ok", "database": "ok"}
+    return {"status": "ok", "app": "ok", "database": "ok"}

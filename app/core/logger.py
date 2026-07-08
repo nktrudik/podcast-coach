@@ -8,7 +8,7 @@ _is_logging_configured = False
 
 
 def setup_logging() -> None:
-    """Настраивает логирование приложения в консоль и файл."""
+    """Configure application logging for console and file output."""
     global _is_logging_configured
     if _is_logging_configured:
         return
@@ -49,5 +49,5 @@ def setup_logging() -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Возвращает именованный логгер для модуля."""
+    """Return a named module logger."""
     return logging.getLogger(name)

@@ -1,160 +1,190 @@
 # English Interview Coach for IT
 
-English Interview Coach for IT is an MVP service for practicing spoken technical
-English for IT job interviews with any technical YouTube video.
+AI-powered practice app for technical English interviews based on YouTube videos.
 
-Upload a video about Python, ML, LLMs, backend, system design, algorithms,
-databases, DevOps, or another technical topic. The service prepares a transcript,
-then an AI coach helps you discuss the topic in English like in an interview:
-it asks interview-style questions, corrects grammar and vocabulary, suggests
-useful phrases, and helps turn your answers into stronger interview-ready
-responses.
+English Interview Coach for IT turns a technical YouTube video into an interview
+practice workspace: the backend downloads and transcribes the audio, then an AI
+coach helps users practice technical answers, improve grammar and vocabulary,
+structure stronger responses, and run mock interviews based on the video content.
 
+## Problem
 
-## How It Works
+IT specialists often learn from technical talks and tutorials, but interview
+practice requires a different skill: explaining the same concepts clearly,
+concisely, and confidently in English. Generic chatbots do not know which source
+material the user is studying, and video notes alone do not provide interview
+feedback.
 
-1. The user uploads a technical YouTube video.
-2. The backend downloads audio and transcribes it.
-3. The user starts an interview practice session.
-4. The AI coach asks interview-style questions, gives feedback, corrects English,
-   and helps improve the answer structure.
+## Solution
 
-## Stack
+The app ingests a YouTube video, extracts audio with `yt-dlp` and FFmpeg,
+transcribes it through an OpenAI-compatible STT model, and opens a practice chat
+grounded in the transcript. The coach asks interview-style questions, reviews
+answers, improves wording, extracts useful technical vocabulary, and keeps the
+session focused on IT interview communication.
 
-- Backend: FastAPI
-- Frontend: Streamlit
-- Database: PostgreSQL
-- YouTube ingestion: yt-dlp
-- Audio conversion: FFmpeg
-- STT/LLM: OpenRouter
-- Config: pydantic-settings via `.env`
-- Runtime/deploy: Docker and Docker Compose
+## Demo Flow
 
-The default database/user names may still use `podcast_coach` for compatibility
-with existing local and Docker environments.
+1. Add a technical YouTube URL in the Vue frontend.
+2. The backend creates a processing job and returns `queued` status immediately.
+3. The frontend polls the video until it becomes `ready` or `failed`.
+4. Start a practice session for a ready video.
+5. Send answers or use starter actions for interview questions, vocabulary, mock
+   interviews, and answer improvement.
 
-## Required Env
+## Features
 
-Copy `.env.example` to `.env` and fill the required values:
+- Vue 3 + TypeScript frontend with upload, video library, status polling, detail
+  view, transcript preview, and chat practice panel.
+- FastAPI backend with versioned `/api/v1` routes and legacy root routes for
+  simple backwards compatibility.
+- PostgreSQL persistence for videos, processing status, chat sessions, and
+  messages.
+- Production-like video job flow using FastAPI `BackgroundTasks`.
+- YouTube audio extraction with `yt-dlp`, FFmpeg conversion, retries, duration
+  limits, optional cookies support, and safe user-facing errors.
+- OpenAI-compatible STT and LLM clients configured for OpenRouter-compatible APIs.
+- Configurable CORS origins through environment variables.
+- Health endpoint with database status.
+- Pytest coverage for health, OpenAPI contract, YouTube URL normalization,
+  prompt building, and service-level mocked STT/LLM flows.
 
-```env
-API_KEY=your_openrouter_api_key
-ADMIN_API_KEY=your_admin_key
+## Architecture
+
+```mermaid
+flowchart LR
+    user[User] --> frontend[Vue 3 frontend]
+    frontend --> api[FastAPI /api/v1]
+    api --> postgres[(PostgreSQL)]
+    api --> worker[BackgroundTasks video job]
+    worker --> ytdlp[yt-dlp]
+    ytdlp --> ffmpeg[FFmpeg audio conversion]
+    worker --> stt[OpenAI-compatible STT]
+    api --> llm[OpenAI-compatible LLM]
+    stt --> postgres
+    llm --> api
 ```
 
-Do not commit `.env`, cookies, `storage/`, `temp/`, `secrets/`, PostgreSQL data,
-or FFmpeg binaries.
+## Tech Stack
 
-## YouTube Cookies
+- Backend: Python 3.13, FastAPI, Pydantic v2, psycopg, pytest.
+- AI clients: OpenAI Python SDK against an OpenAI-compatible base URL.
+- Media: yt-dlp and FFmpeg.
+- Frontend: Vue 3, TypeScript, Vite, plain CSS.
+- Runtime: Docker Compose with PostgreSQL, backend, and Nginx-served frontend.
+- Quality: Ruff, Mypy, Bandit, Pytest, GitHub Actions.
 
-If YouTube responds with `Sign in to confirm you're not a bot`, add a cookies
-file exported from an authorized browser and point the config to it:
+## Screenshots
 
-```env
-YOUTUBE_COOKIES_FILE=cookies_www.youtube.com.txt
-```
+Screenshots are not committed yet. Suggested captures:
 
-The backend looks for a relative filename in the working directory, then in
-`/etc/secrets` for Render Secret Files, then in `/app/secrets` for Docker Compose.
+- Video upload and empty state.
+- Processing status in the video library.
+- Ready video detail with transcript preview.
+- Chat practice session with assistant feedback.
 
-For Render, upload the file as a Secret File at:
-
-```text
-/etc/secrets/cookies_www.youtube.com.txt
-```
-
-For Docker Compose, keep the local filename in `YOUTUBE_COOKIES_FILE`; Compose
-mounts it into `/app/secrets` read-only without copying it into the image.
-
-## Local Run Without Docker
-
-Create a virtual environment, install dependencies, and prepare `.env`:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
-copy .env.example .env
-```
-
-For local run without Docker, PostgreSQL must be available. If the database runs
-on the host, set `DATABASE_URL`, for example:
-
-```env
-DATABASE_URL=postgresql://podcast_coach:podcast_coach@localhost:5432/podcast_coach
-```
-
-Start the backend:
-
-```powershell
-.\.venv\Scripts\python.exe main.py
-```
-
-Start the frontend in another terminal:
-
-```powershell
-.\.venv\Scripts\streamlit.exe run frontend/app.py
-```
-
-URLs:
-
-- Backend Swagger: http://127.0.0.1:8000/docs
-- Frontend: http://127.0.0.1:8501
-- Health-check: http://127.0.0.1:8000/health
-
-## Docker Compose
-
-Create `.env` from the template:
+## Quick Start
 
 ```bash
 cp .env.example .env
-```
-
-Fill `API_KEY` and `ADMIN_API_KEY`, then run:
-
-```bash
+# Fill API_KEY and ADMIN_API_KEY in .env
 docker compose up --build
 ```
 
-Docker Compose starts PostgreSQL automatically and stores data in the named volume
-`postgres_data`, so data survives backend/frontend rebuilds.
+Open:
 
-After startup:
+- Frontend: http://localhost:3000
+- Backend OpenAPI: http://localhost:8000/docs
+- Health: http://localhost:8000/health
 
-- Backend Swagger: http://localhost:8000/docs
-- Frontend: http://localhost:8501
-- Health-check: http://localhost:8000/health
+## Environment Variables
 
-Inside Docker Compose, the frontend talks to the backend through:
+| Variable | Description |
+| --- | --- |
+| `API_KEY` | API key for the OpenAI-compatible provider. |
+| `ADMIN_API_KEY` | Key required for admin delete endpoints. |
+| `BASE_URL` | OpenAI-compatible API base URL. |
+| `STT_MODEL_NAME` | Model used for speech-to-text. |
+| `LLM_MODEL_NAME` | Model used for interview coaching responses. |
+| `DATABASE_URL` | PostgreSQL connection URL. |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by CORS. |
+| `MAX_VIDEO_DURATION_MINUTES` | Maximum supported YouTube video duration. |
+| `UPLOADED_VIDEOS_LIMIT` | Maximum number of stored videos. |
+| `CHAT_SESSIONS_PER_VIDEO_LIMIT` | Maximum chat sessions per video. |
+| `YOUTUBE_COOKIES_FILE` | Optional cookies filename or path for restricted YouTube flows. |
+| `VITE_API_BASE_URL` | Browser-visible backend base URL used at frontend build time. |
 
-```env
-FRONTEND_BACKEND_BASE_URL=http://backend:8000
+### Optional YouTube Cookies
+
+Cookies are not mounted by default. If YouTube requires authentication, export a
+cookies file locally, keep it out of git, mount it into the backend container, and
+set `YOUTUBE_COOKIES_FILE` to the mounted filename or absolute path.
+
+## API Overview
+
+- `GET /health` - application and database health.
+- `POST /api/v1/videos` - create a video processing job.
+- `GET /api/v1/videos` - list videos with processing status.
+- `GET /api/v1/videos/{video_id}` - get video details and transcript when ready.
+- `POST /api/v1/chat/start` - create a practice chat session for a ready video.
+- `POST /api/v1/chat/message` - send a practice message and receive coach feedback.
+- `GET /api/v1/chat/sessions` - list chat sessions.
+- `GET /api/v1/chat/sessions/{session_id}/messages` - read chat history.
+- `DELETE /api/v1/admin/videos/{video_id}` - delete a video with `X-Admin-Key`.
+- `DELETE /api/v1/admin/chat/sessions/{session_id}` - delete a session with
+  `X-Admin-Key`.
+
+See [docs/api.md](docs/api.md) for request and response examples.
+
+## Project Structure
+
+```text
+app/
+  api/          FastAPI routes, schemas, dependencies, errors
+  clients/      YouTube, STT, LLM, retry clients
+  core/         settings, logging, shared types, URL normalization
+  db/           PostgreSQL connection, migrations, repositories
+  services/     video processing and chat business logic
+frontend/
+  src/          Vue application, components, API client, composable state
+docs/           product, API, and architecture notes
+tests/          backend unit and contract tests
 ```
 
-## Render Deploy Notes
+## Testing and Quality Checks
 
-Render web services do not have PostgreSQL running on `localhost`. Create or
-attach a Render PostgreSQL database and set the backend service environment
-variable:
-
-```env
-DATABASE_URL=<Render PostgreSQL Internal Database URL>
+```bash
+make test
+make lint
+make format
+make security
+mypy .
 ```
 
-Use the internal database URL for backend-to-database traffic inside Render. If
-`DATABASE_URL` is missing, the app falls back to the local development default
-`localhost:5432` and startup fails with `Connection refused`.
+The CI workflow runs Ruff, Mypy, Bandit, and Pytest for the backend and builds
+the Vue frontend.
 
-Also set the required backend variables in Render:
+## Roadmap
 
-```env
-API_KEY=your_openrouter_api_key
-ADMIN_API_KEY=your_admin_key
-```
+- Replace `BackgroundTasks` with a durable queue when jobs need retries across
+  process restarts.
+- Add authenticated users and per-user video libraries.
+- Add frontend screenshots and a short demo recording.
+- Add richer progress telemetry for download, conversion, STT, and transcript
+  persistence stages.
+- Add end-to-end tests for Docker Compose startup and browser workflows.
 
-If the frontend is deployed as a separate Render service, set:
+## Security Notes
 
-```env
-FRONTEND_BACKEND_BASE_URL=https://your-backend-service.onrender.com
-```
+- Do not commit `.env`, API keys, cookies, generated media, storage files, temp
+  files, database dumps, or logs.
+- API responses use safe user-facing errors; technical details are logged
+  server-side.
+- CORS origins are configurable and should be restricted in deployed
+  environments.
+- Admin endpoints require `X-Admin-Key`.
 
+## Suggested GitHub Topics
 
+`python`, `fastapi`, `vue`, `typescript`, `llm`, `openai-api`, `stt`, `youtube`,
+`docker`, `interview-preparation`

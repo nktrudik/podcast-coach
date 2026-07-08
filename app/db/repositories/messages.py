@@ -1,14 +1,13 @@
-from typing import Any
-
-from psycopg import Error
-
+from app.core.types import DatabaseRecord
 from app.db.connection import get_connection
 from app.db.errors import DatabaseOperationError, DatabaseValidationError
+from app.db.rows import required_int, to_database_record
 from app.db.validation import (
     validate_messages_limit,
     validate_non_empty_text,
     validate_positive_int,
 )
+from psycopg import Error
 
 _ALLOWED_ROLES = {"user", "assistant", "system"}
 
@@ -18,15 +17,13 @@ def add_message(
     role: str,
     content: str,
 ) -> int:
-    """Сохраняет сообщение в чате и возвращает его идентификатор."""
+    """Store a chat message and return its id."""
     validated_session_id = validate_positive_int(session_id, "session_id")
     normalized_role = validate_non_empty_text(role, "role")
     normalized_content = validate_non_empty_text(content, "content")
 
     if normalized_role not in _ALLOWED_ROLES:
-        raise DatabaseValidationError(
-            "Роль сообщения должна быть user, assistant или system"
-        )
+        raise DatabaseValidationError("Message role must be user, assistant, or system")
 
     try:
         with get_connection() as conn:
@@ -39,14 +36,14 @@ def add_message(
                 (validated_session_id, normalized_role, normalized_content),
             ).fetchone()
             if row is None:
-                raise DatabaseOperationError("База данных не вернула id сообщения")
-            return int(row["id"])
+                raise DatabaseOperationError("The database did not return a message id")
+            return required_int(row, "id", "message")
     except Error as exc:
-        raise DatabaseOperationError("Не удалось сохранить сообщение") from exc
+        raise DatabaseOperationError("Failed to store the message") from exc
 
 
-def get_messages(session_id: int, limit: int | None = None) -> list[dict[str, Any]]:
-    """Возвращает историю сообщений для указанной чат-сессии."""
+def get_messages(session_id: int, limit: int | None = None) -> list[DatabaseRecord]:
+    """Return message history for a chat session."""
     validated_session_id = validate_positive_int(session_id, "session_id")
     validated_limit = validate_messages_limit(limit)
 
@@ -78,6 +75,6 @@ def get_messages(session_id: int, limit: int | None = None) -> list[dict[str, An
                     (validated_session_id, validated_limit),
                 ).fetchall()
     except Error as exc:
-        raise DatabaseOperationError("Не удалось получить историю сообщений") from exc
+        raise DatabaseOperationError("Failed to fetch message history") from exc
 
-    return [dict(row) for row in rows]
+    return [to_database_record(row) for row in rows]

@@ -1,6 +1,7 @@
 import base64
 import os
-from typing import Any, cast
+from collections.abc import Mapping
+from typing import cast
 
 from openai import APIConnectionError, APITimeoutError, OpenAI, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
@@ -14,18 +15,16 @@ logger = get_logger(__name__)
 
 
 def _extract_retry_after_seconds(exc: RateLimitError) -> int | None:
-    """Пытается извлечь retry-after из ответа провайдера."""
+    """Extract retry-after from the provider response when available."""
     response = getattr(exc, "response", None)
     if response is None:
         return None
 
     headers = getattr(response, "headers", None)
-    if headers is None:
+    if not isinstance(headers, Mapping):
         return None
 
-    retry_after_raw: Any = None
-    if hasattr(headers, "get"):
-        retry_after_raw = headers.get("retry-after") or headers.get("Retry-After")
+    retry_after_raw = headers.get("retry-after") or headers.get("Retry-After")
 
     if isinstance(retry_after_raw, str) and retry_after_raw.strip().isdigit():
         retry_after = int(retry_after_raw.strip())
@@ -38,45 +37,45 @@ def _extract_retry_after_seconds(exc: RateLimitError) -> int | None:
 
 
 def _read_audio_base64(audio_path: str) -> str:
-    """Читает аудиофайл и кодирует его в base64."""
+    """Read an audio file and encode it as base64."""
     with open(audio_path, "rb") as file_obj:
         return base64.b64encode(file_obj.read()).decode("utf-8")
 
 
 def _detect_audio_format(audio_path: str) -> str:
-    """Определяет формат аудио по расширению файла."""
+    """Detect audio format from the file extension."""
     ext = os.path.splitext(audio_path)[1].lower().replace(".", "")
     return ext or "wav"
 
 
 def _validate_audio_path(audio_path: str) -> str:
-    """Проверяет путь до аудио перед отправкой в STT."""
+    """Validate the audio path before sending it to STT."""
     if not isinstance(audio_path, str):
-        raise ClientValidationError("Путь к аудио должен быть строкой")
+        raise ClientValidationError("Audio path must be a string")
 
     normalized_path = audio_path.strip()
     if not normalized_path:
-        raise ClientValidationError("Путь к аудио не должен быть пустым")
+        raise ClientValidationError("Audio path must not be empty")
     if not os.path.isfile(normalized_path):
-        raise ClientValidationError("Аудиофайл не найден")
+        raise ClientValidationError("Audio file was not found")
 
     return normalized_path
 
 
 def _validate_prompt(prompt: str) -> str:
-    """Проверяет текстовый промпт для STT."""
+    """Validate the text prompt used for STT."""
     if not isinstance(prompt, str):
-        raise ClientValidationError("Промпт должен быть строкой")
+        raise ClientValidationError("Prompt must be a string")
 
     normalized_prompt = prompt.strip()
     if not normalized_prompt:
-        raise ClientValidationError("Промпт не должен быть пустым")
+        raise ClientValidationError("Prompt must not be empty")
 
     return normalized_prompt
 
 
-def _extract_text_from_content(content: Any) -> str:
-    """Извлекает текст из разных форматов content, которые может вернуть OpenRouter."""
+def _extract_text_from_content(content: object) -> str:
+    """Extract text from content formats returned by OpenRouter."""
     if isinstance(content, str):
         return content.strip()
 
@@ -107,7 +106,7 @@ def _extract_text_from_content(content: Any) -> str:
 def transcribe_audio(
     audio_path: str, prompt: str = "Send transcript in English"
 ) -> str:
-    """Отправляет аудио во внешний STT-сервис и возвращает транскрипт."""
+    """Send audio to the external STT provider and return a transcript."""
     normalized_path = _validate_audio_path(audio_path)
     normalized_prompt = _validate_prompt(prompt)
 
@@ -115,7 +114,7 @@ def transcribe_audio(
         base_url=settings.base_url,
         api_key=settings.api_key,
     )
-    logger.info("Начата транскрибация аудио")
+    logger.info("Starting audio transcription")
 
     audio_data = _read_audio_base64(normalized_path)
     audio_format = _detect_audio_format(normalized_path)
@@ -160,7 +159,7 @@ def transcribe_audio(
         )
     except APITimeoutError as exc:
         raise STTTimeoutError(
-            "Превышено время ожидания ответа STT-сервиса",
+            "The STT provider timed out",
             details={
                 "timeout_seconds": settings.external_request_timeout_seconds,
                 "attempts": settings.stt_request_max_attempts,
@@ -168,7 +167,7 @@ def transcribe_audio(
         ) from exc
     except APIConnectionError as exc:
         raise STTRequestError(
-            "Не удалось подключиться к STT-сервису",
+            "Failed to connect to the STT provider",
             details={"attempts": settings.stt_request_max_attempts},
         ) from exc
     except RateLimitError as exc:
@@ -181,26 +180,26 @@ def transcribe_audio(
             details["retry_after_seconds"] = retry_after_seconds
 
         raise STTRequestError(
-            "Сервис распознавания речи сейчас перегружен (лимит запросов). "
-            "Попробуй повторить загрузку через 1-2 минуты.",
+            "The speech recognition provider is currently rate limited. "
+            "Try again in one or two minutes.",
             details=details,
         ) from exc
     except Exception as exc:
-        logger.warning("Ошибка обращения к STT: %s", exc)
+        logger.warning("STT request failed: %s", exc)
         raise STTRequestError(
-            "Не удалось получить транскрипт от STT-сервиса",
+            "Failed to get a transcript from the STT provider",
             details={"attempts": settings.stt_request_max_attempts},
         ) from exc
 
     try:
         response_message = completion.choices[0].message
     except (AttributeError, IndexError, TypeError) as exc:
-        raise STTRequestError("STT-сервис вернул некорректный ответ") from exc
+        raise STTRequestError("The STT provider returned an invalid response") from exc
 
     message_content = _extract_text_from_content(response_message.content)
     if not message_content:
-        raise STTRequestError("STT-сервис вернул пустой транскрипт")
+        raise STTRequestError("The STT provider returned an empty transcript")
 
-    logger.info("Транскрибация успешно завершена")
+    logger.info("Audio transcription completed successfully")
 
     return message_content.strip()

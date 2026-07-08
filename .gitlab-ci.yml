@@ -1,27 +1,28 @@
-#-------------------------------------------
-# English podcast coach 
-#
-# Created by nktrudik
-#-------------------------------------------
-
-
 stages:
-    - quality
-    - build
+  - quality
+  - build
 
+backend_quality:
+  stage: quality
+  image: python:3.13-slim
+  before_script:
+    - python -m pip install --upgrade pip
+    - python -m pip install -r requirements.txt
+  script:
+    - ruff format --check .
+    - ruff check .
+    - mypy .
+    - bandit -r .
+    - pytest
 
-quality:
-    stage: quality
-    image: python:3.13-slim
-    before_script:
-        - pip install poetry
-        - poetry install --with dev --no-interaction --no-ansi
-    script:
-        - poetry run ruff format --check .
-        - poetry run ruff check .
-        - poetry run mypy .
-        - poetry run bandit -r app frontend
-
+frontend_build:
+  stage: quality
+  image: node:22-alpine
+  before_script:
+    - cd frontend
+    - npm install
+  script:
+    - npm run build
 
 build_backend:
   stage: build
@@ -34,7 +35,6 @@ build_backend:
   script:
     - docker build -f Dockerfile.backend -t podcast-coach-backend:$CI_COMMIT_SHORT_SHA .
 
-
 build_frontend:
   stage: build
   image: docker:27.5.1
@@ -45,7 +45,3 @@ build_frontend:
     DOCKER_TLS_CERTDIR: ""
   script:
     - docker build -f Dockerfile.frontend -t podcast-coach-frontend:$CI_COMMIT_SHORT_SHA .
-
-
-
-

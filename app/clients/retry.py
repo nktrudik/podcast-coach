@@ -1,14 +1,12 @@
 import time
 from collections.abc import Callable
-from typing import TypeVar
 
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
-ResultT = TypeVar("ResultT")
 
 
-def run_with_retry(
+def run_with_retry[ResultT](
     operation: Callable[[], ResultT],
     *,
     operation_name: str,
@@ -16,9 +14,9 @@ def run_with_retry(
     delay_seconds: float,
     retry_on: tuple[type[Exception], ...],
 ) -> ResultT:
-    """Выполняет операцию повторно при временной ошибке."""
+    """Retry an operation when one of the configured transient errors is raised."""
     if max_attempts < 1:
-        raise ValueError("max_attempts должен быть больше нуля")
+        raise ValueError("max_attempts must be greater than zero")
 
     last_exc: Exception | None = None
     for attempt in range(1, max_attempts + 1):
@@ -28,7 +26,7 @@ def run_with_retry(
             last_exc = exc
             if attempt < max_attempts:
                 logger.warning(
-                    "%s: временная ошибка на попытке %s/%s: %s",
+                    "%s transient error on attempt %s/%s: %s",
                     operation_name,
                     attempt,
                     max_attempts,
@@ -40,4 +38,4 @@ def run_with_retry(
     if last_exc is not None:
         raise last_exc
 
-    raise RuntimeError("Некорректное состояние выполнения retry")
+    raise RuntimeError("Invalid retry execution state")

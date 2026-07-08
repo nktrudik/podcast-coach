@@ -19,6 +19,9 @@ secrets/
 .idea/
 .vscode/
 .streamlit/secrets.toml
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # Local ffmpeg binaries must not be committed.
 ffmpeg

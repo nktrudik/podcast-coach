@@ -13,12 +13,12 @@ _admin_api_key = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 
 
 def get_settings() -> Settings:
-    """Возвращает объект настроек приложения для dependency injection."""
+    """Return application settings for dependency injection."""
     return settings
 
 
 def require_admin(key: str | None = Security(_admin_api_key)) -> None:
-    """Проверяет административный ключ доступа к защищенным ручкам."""
+    """Validate the administrative API key for protected endpoints."""
     if not key or not secrets.compare_digest(key, settings.admin_api_key):
-        logger.warning("Попытка доступа к admin-ручке с некорректным ключом")
-        raise APIAuthorizationError("Неверный или отсутствующий admin ключ")
+        logger.warning("Admin endpoint access denied because the key is invalid")
+        raise APIAuthorizationError("Missing or invalid admin key")

@@ -29,24 +29,17 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./temp:/app/temp
-      - type: bind
-        source: ./${YOUTUBE_COOKIES_FILE:-.env.example}
-        target: /app/secrets/${YOUTUBE_COOKIES_FILE:-unused_cookies_placeholder}
-        read_only: true
-        bind:
-          create_host_path: false
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
-      - "8501:8501"
+      - "3000:3000"
     depends_on:
       - backend
-    environment:
-      FRONTEND_BACKEND_BASE_URL: http://backend:8000
-      FRONTEND_REQUEST_TIMEOUT_SECONDS: ${FRONTEND_REQUEST_TIMEOUT_SECONDS:-180}
 
 
 volumes:

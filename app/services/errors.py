@@ -2,7 +2,7 @@ from app.core.errors import AppError
 
 
 class ServiceError(AppError):
-    """Базовая ошибка сервисного слоя."""
+    """Base service layer error."""
 
     module = "services"
     error_code = "service_error"
@@ -10,14 +10,14 @@ class ServiceError(AppError):
 
 
 class ServiceValidationError(ServiceError):
-    """Ошибка валидации входных данных сервиса."""
+    """Service input validation error."""
 
     error_code = "service_validation_error"
     status_code = 400
 
 
 class VideoProcessingError(ServiceError):
-    """Ошибка обработки видео."""
+    """Video processing error."""
 
     error_code = "video_processing_error"
     status_code = 503

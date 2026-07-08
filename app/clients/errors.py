@@ -2,7 +2,7 @@ from app.core.errors import AppError
 
 
 class ClientError(AppError):
-    """Базовая ошибка внешних клиентов."""
+    """Base external client error."""
 
     module = "clients"
     error_code = "client_error"
@@ -10,47 +10,47 @@ class ClientError(AppError):
 
 
 class ClientValidationError(ClientError):
-    """Ошибка валидации данных перед вызовом внешнего сервиса."""
+    """Validation error before calling an external service."""
 
     error_code = "client_validation_error"
     status_code = 400
 
 
 class ClientTimeoutError(ClientError):
-    """Ошибка таймаута при обращении к внешнему сервису."""
+    """Timeout error while calling an external service."""
 
     error_code = "client_timeout_error"
     status_code = 504
 
 
 class LLMRequestError(ClientError):
-    """Ошибка обращения к LLM-сервису."""
+    """LLM provider request error."""
 
     error_code = "llm_request_error"
     status_code = 502
 
 
 class LLMTimeoutError(ClientTimeoutError):
-    """Ошибка таймаута при обращении к LLM-сервису."""
+    """Timeout error while calling the LLM provider."""
 
     error_code = "llm_timeout_error"
 
 
 class STTRequestError(ClientError):
-    """Ошибка обращения к STT-сервису."""
+    """STT provider request error."""
 
     error_code = "stt_request_error"
     status_code = 502
 
 
 class STTTimeoutError(ClientTimeoutError):
-    """Ошибка таймаута при обращении к STT-сервису."""
+    """Timeout error while calling the STT provider."""
 
     error_code = "stt_timeout_error"
 
 
 class YouTubeDownloadError(ClientError):
-    """Ошибка загрузки аудио из YouTube."""
+    """YouTube audio download error."""
 
     error_code = "youtube_download_error"
     status_code = 503

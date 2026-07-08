@@ -1,14 +1,12 @@
-from typing import Any
-
 from psycopg import Connection, sql
 
 _SEQUENCE_TABLES = {"videos", "chat_sessions", "messages"}
 
 
-def reset_sequence(conn: Connection[Any], table_name: str) -> None:
-    """Синхронизирует PostgreSQL identity sequence с текущим max id таблицы."""
+def reset_sequence(conn: Connection[dict[str, object]], table_name: str) -> None:
+    """Synchronize a PostgreSQL identity sequence with the table max id."""
     if table_name not in _SEQUENCE_TABLES:
-        raise ValueError(f"Недопустимая таблица для сброса sequence: {table_name}")
+        raise ValueError(f"Unsupported table for sequence reset: {table_name}")
 
     query = sql.SQL(
         """

@@ -2,57 +2,32 @@ import os
 import shutil
 import subprocess  # nosec B404
 import time
-from typing import Any
+from collections.abc import Callable, Mapping
 
-import yt_dlp  # type: ignore[import-untyped]
-from yt_dlp.utils import DownloadError  # type: ignore[import-untyped]
+import yt_dlp
+from yt_dlp.utils import DownloadError
 
 from app.clients.errors import ClientValidationError, YouTubeDownloadError
+from app.clients.youtube_options import (
+    AUDIO_ONLY_FORMAT_SELECTOR,
+    SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR,
+    build_ydl_options,
+    youtube_audio_extractor_args,
+    youtube_fallback_extractor_args,
+)
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.core.types import JsonValue
 from app.core.youtube import normalize_youtube_url
 
 logger = get_logger(__name__)
 
-RENDER_SECRETS_DIR = "/etc/secrets"
-DOCKER_SECRETS_DIR = "/app/secrets"
-AUDIO_ONLY_FORMAT_SELECTOR = (
-    "bestaudio[acodec!=none][vcodec=none]/"
-    "bestaudio[acodec!=none]/"
-    "worstaudio[acodec!=none]"
-)
-SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR = (
-    f"{AUDIO_ONLY_FORMAT_SELECTOR}/worst[acodec!=none]"
-)
 
-
-def _youtube_audio_extractor_args() -> dict[str, dict[str, list[str]]]:
-    """Возвращает YouTube extractor args для более стабильной audio-only выдачи."""
-    return {
-        "youtube": {
-            "player_client": ["tv_downgraded"],
-            "player_skip": ["webpage", "initial_data"],
-        }
-    }
-
-
-def _youtube_fallback_extractor_args() -> dict[str, dict[str, list[str]]]:
-    """Возвращает YouTube extractor args для маленького muxed fallback."""
-    return {
-        "youtube": {
-            "player_client": ["tv_downgraded", "web_safari"],
-            "player_skip": ["webpage"],
-        }
-    }
-
-
-def _default_js_runtimes() -> dict[str, dict[str, str]]:
-    """Возвращает JS runtimes для YouTube challenge solving."""
-    return {"deno": {}, "node": {}}
-
-
-def _run_youtube_with_retry(operation_name: str, operation):
-    """Выполняет YouTube-операцию с мягкими повторами для временных ошибок."""
+def _run_youtube_with_retry[ResultT](
+    operation_name: str,
+    operation: Callable[[], ResultT],
+) -> ResultT:
+    """Run a YouTube operation with retries for transient errors."""
     last_exc: YouTubeDownloadError | None = None
     for attempt in range(1, settings.youtube_max_retries + 1):
         try:
@@ -64,7 +39,7 @@ def _run_youtube_with_retry(operation_name: str, operation):
                 raise
 
             logger.warning(
-                "%s: временная ошибка на попытке %s/%s",
+                "%s transient error on attempt %s/%s",
                 operation_name,
                 attempt,
                 settings.youtube_max_retries,
@@ -75,18 +50,18 @@ def _run_youtube_with_retry(operation_name: str, operation):
     if last_exc is not None:
         raise last_exc
 
-    raise RuntimeError("Некорректное состояние повторных попыток YouTube")
+    raise RuntimeError("Invalid YouTube retry state")
 
 
 def _create_temp_folder() -> str:
-    """Создает папку для временных файлов и возвращает ее путь."""
+    """Create the temporary media folder and return its path."""
     temp_dir = os.path.join(".", "temp")
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir
 
 
 def _clear_temp_folder() -> None:
-    """Очищает временные файлы перед новой попыткой скачивания."""
+    """Clear temporary files before a new download attempt."""
     temp_dir = _create_temp_folder()
     for filename in os.listdir(temp_dir):
         file_path = os.path.join(temp_dir, filename)
@@ -94,11 +69,11 @@ def _clear_temp_folder() -> None:
             if os.path.isfile(file_path) or os.path.islink(file_path):
                 os.remove(file_path)
         except OSError as exc:
-            logger.warning("Не удалось удалить временный файл перед retry: %s", exc)
+            logger.warning("Failed to delete a temporary file before retry: %s", exc)
 
 
 def _is_non_retryable_download_error(exc: DownloadError) -> bool:
-    """Определяет ошибки YouTube, которые нет смысла повторять подряд."""
+    """Return whether a YouTube error should not be retried immediately."""
     message = str(exc).lower()
     non_retryable_markers = (
         "403",
@@ -108,19 +83,19 @@ def _is_non_retryable_download_error(exc: DownloadError) -> bool:
         "requested format is not available",
         "sign in to confirm",
         "confirm you're not a bot",
-        "confirm you’re not a bot",
+        "confirm you\u2019re not a bot",
         "not a bot",
     )
     return any(marker in message for marker in non_retryable_markers)
 
 
 def _requires_youtube_auth(exc: DownloadError) -> bool:
-    """Определяет ошибки, где YouTube явно требует cookies/авторизацию."""
+    """Return whether YouTube explicitly asks for cookies or authentication."""
     message = str(exc).lower()
     auth_markers = (
         "sign in to confirm",
         "confirm you're not a bot",
-        "confirm you’re not a bot",
+        "confirm you\u2019re not a bot",
         "not a bot",
         "use --cookies",
         "use --cookies-from-browser",
@@ -129,92 +104,20 @@ def _requires_youtube_auth(exc: DownloadError) -> bool:
 
 
 def _is_format_unavailable_error(exc: DownloadError) -> bool:
-    """Определяет ошибку выбора недоступного медиаформата."""
+    """Return whether the selected media format is unavailable."""
     return "requested format is not available" in str(exc).lower()
 
 
-def _get_cookie_path_candidates(configured_path: str) -> list[str]:
-    """Возвращает безопасный список путей, где может лежать cookies-файл."""
-    expanded_path = os.path.expandvars(os.path.expanduser(configured_path))
-    if os.path.isabs(expanded_path):
-        return [expanded_path]
-
-    return [
-        expanded_path,
-        os.path.join(RENDER_SECRETS_DIR, expanded_path),
-        os.path.join(DOCKER_SECRETS_DIR, expanded_path),
-    ]
-
-
-def _resolve_youtube_cookies_file(configured_path: str) -> tuple[str | None, list[str]]:
-    """Ищет cookies-файл по указанному пути и стандартным secret-директориям."""
-    candidates = _get_cookie_path_candidates(configured_path)
-    for candidate in candidates:
-        if os.path.isfile(candidate):
-            return candidate, candidates
-    return None, candidates
-
-
-def _prepare_youtube_cookies_file(cookies_file: str) -> str:
-    """Копирует cookies в рабочий файл, который yt-dlp может обновлять."""
-    temp_dir = _create_temp_folder()
-    working_copy = os.path.join(temp_dir, "youtube_cookies_working.txt")
-    shutil.copyfile(cookies_file, working_copy)
-    return working_copy
-
-
 def _resolve_ffmpeg_path() -> str:
-    """Находит исполняемый файл FFmpeg и возвращает абсолютный путь."""
+    """Find the FFmpeg executable and return an absolute path."""
     ffmpeg_path = shutil.which("ffmpeg")
     if not ffmpeg_path:
         raise YouTubeDownloadError(
-            "FFmpeg не найден в PATH",
+            "FFmpeg was not found in PATH",
             details={"retryable": False},
         )
 
     return os.path.abspath(ffmpeg_path)
-
-
-def _build_ydl_options(**base_options: Any) -> dict[str, Any]:
-    """Собирает yt-dlp options и безопасно подключает cookies, если они заданы."""
-    ydl_opts = dict(base_options)
-    # yt-dlp по умолчанию включает только Deno, а Docker-образ ставит Node.js.
-    ydl_opts.setdefault("js_runtimes", _default_js_runtimes())
-    configured_cookies_file = (
-        settings.youtube_cookies_file.strip() if settings.youtube_cookies_file else ""
-    )
-    cookies_configured = bool(configured_cookies_file)
-
-    if not cookies_configured:
-        logger.info("YouTube cookies enabled: False")
-        return ydl_opts
-
-    cookies_file, checked_paths = _resolve_youtube_cookies_file(configured_cookies_file)
-    if cookies_file is None:
-        raise YouTubeDownloadError(
-            "Файл YouTube cookies не найден",
-            details={
-                "cookies_configured": True,
-                "configured_path": configured_cookies_file,
-                "checked_paths": checked_paths,
-                "retryable": False,
-            },
-        )
-
-    try:
-        ydl_opts["cookiefile"] = _prepare_youtube_cookies_file(cookies_file)
-    except OSError as exc:
-        raise YouTubeDownloadError(
-            "Не удалось подготовить файл YouTube cookies",
-            details={
-                "cookies_configured": True,
-                "configured_path": configured_cookies_file,
-                "retryable": False,
-            },
-        ) from exc
-
-    logger.info("YouTube cookies enabled: True")
-    return ydl_opts
 
 
 def _build_download_error(
@@ -222,12 +125,12 @@ def _build_download_error(
     *,
     youtube_url: str,
     exc: DownloadError,
-    ydl_opts: dict[str, Any],
+    ydl_opts: Mapping[str, object],
 ) -> YouTubeDownloadError:
-    """Создает понятную ошибку YouTube без утечки содержимого cookies."""
+    """Create a safe YouTube error without leaking cookies content."""
     cookies_active = bool(ydl_opts.get("cookiefile"))
     retryable = not _is_non_retryable_download_error(exc)
-    details: dict[str, Any] = {
+    details: dict[str, JsonValue] = {
         "youtube_url": youtube_url,
         "retryable": retryable,
         "cookies_configured": bool(settings.youtube_cookies_file),
@@ -237,16 +140,16 @@ def _build_download_error(
     if _requires_youtube_auth(exc):
         if cookies_active:
             message = (
-                "YouTube не принял cookies. Проверь, что файл экспортирован из "
-                "авторизованного браузера и не устарел"
+                "YouTube rejected the cookies file. Export fresh cookies from an "
+                "authenticated browser and try again."
             )
         else:
-            message = "YouTube требует cookies, но файл cookies не подключен"
+            message = "YouTube requires cookies, but no cookies file is configured."
         details["retryable"] = False
     elif _is_format_unavailable_error(exc):
         message = (
-            "YouTube не отдал доступный аудиоформат для этого видео. "
-            "Попробуй обновить yt-dlp или использовать другую ссылку"
+            "YouTube did not provide an available audio format for this video. "
+            "Try a different link or update yt-dlp."
         )
         details["retryable"] = False
     else:
@@ -256,26 +159,24 @@ def _build_download_error(
 
 
 def _validate_youtube_url(youtube_url: str) -> str:
-    """Проверяет, что передана непустая ссылка YouTube."""
+    """Validate a non-empty YouTube URL."""
     if not isinstance(youtube_url, str):
-        raise ClientValidationError("Ссылка на YouTube должна быть строкой")
+        raise ClientValidationError("YouTube URL must be a string")
 
     normalized_url = youtube_url.strip()
     if not normalized_url:
-        raise ClientValidationError("Ссылка на YouTube не должна быть пустой")
+        raise ClientValidationError("YouTube URL must not be empty")
 
     try:
         canonical_url, _ = normalize_youtube_url(normalized_url)
     except Exception as exc:
-        raise ClientValidationError(
-            "Поддерживаются только корректные ссылки YouTube"
-        ) from exc
+        raise ClientValidationError("Only valid YouTube URLs are supported") from exc
 
     return canonical_url
 
 
-def _extract_duration_seconds(raw_value: Any) -> int | None:
-    """Извлекает длительность в секундах из метаданных yt-dlp."""
+def _extract_duration_seconds(raw_value: object) -> int | None:
+    """Extract duration in seconds from yt-dlp metadata."""
     if isinstance(raw_value, bool):
         return None
 
@@ -295,19 +196,24 @@ def _extract_duration_seconds(raw_value: Any) -> int | None:
     return None
 
 
-def _get_selected_download_format(info: dict[str, Any]) -> dict[str, Any]:
-    """Возвращает формат, который yt-dlp фактически выбрал для скачивания."""
+def _string_key_dict(value: Mapping[object, object]) -> dict[str, object]:
+    """Convert a mapping returned by yt-dlp to a string-key dictionary."""
+    return {str(key): item for key, item in value.items()}
+
+
+def _get_selected_download_format(info: Mapping[str, object]) -> dict[str, object]:
+    """Return the format yt-dlp selected for the actual download."""
     requested_downloads = info.get("requested_downloads")
     if isinstance(requested_downloads, list) and requested_downloads:
         selected = requested_downloads[0]
         if isinstance(selected, dict):
-            return selected
+            return _string_key_dict(selected)
 
-    return info
+    return dict(info)
 
 
-def _log_selected_download_format(info: dict[str, Any]) -> None:
-    """Логирует выбранный YouTube-формат для диагностики размера загрузки."""
+def _log_selected_download_format(info: Mapping[str, object]) -> None:
+    """Log the selected YouTube format for download-size diagnostics."""
     selected_format = _get_selected_download_format(info)
     format_id = selected_format.get("format_id")
     ext = selected_format.get("ext")
@@ -317,7 +223,7 @@ def _log_selected_download_format(info: dict[str, Any]) -> None:
     filesize_approx = selected_format.get("filesize_approx")
 
     logger.info(
-        "Выбран YouTube format: format_id=%s ext=%s acodec=%s vcodec=%s "
+        "Selected YouTube format: format_id=%s ext=%s acodec=%s vcodec=%s "
         "filesize=%s filesize_approx=%s",
         format_id,
         ext,
@@ -328,7 +234,7 @@ def _log_selected_download_format(info: dict[str, Any]) -> None:
     )
     if vcodec and vcodec != "none":
         logger.warning(
-            "Выбран не audio-only YouTube format: format_id=%s ext=%s "
+            "Selected a non audio-only YouTube format: format_id=%s ext=%s "
             "acodec=%s vcodec=%s",
             format_id,
             ext,
@@ -339,51 +245,55 @@ def _log_selected_download_format(info: dict[str, Any]) -> None:
 
 def _download_youtube_format(
     normalized_url: str,
-    ydl_opts: dict[str, Any],
-) -> tuple[dict[str, Any], str]:
-    """Скачивает YouTube-формат и возвращает info + путь к временному файлу."""
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(normalized_url, download=True)
-        if not isinstance(info, dict):
+    ydl_opts: Mapping[str, object],
+) -> tuple[dict[str, object], str]:
+    """Download a YouTube format and return metadata plus the temp file path."""
+    with yt_dlp.YoutubeDL(dict(ydl_opts)) as ydl:
+        raw_info = ydl.extract_info(normalized_url, download=True)
+        if not isinstance(raw_info, dict):
             raise YouTubeDownloadError(
-                "YouTube вернул некорректные данные после загрузки",
+                "YouTube returned invalid data after download",
                 details={"youtube_url": normalized_url, "retryable": True},
             )
-        source_path = ydl.prepare_filename(info)
+        info = _string_key_dict(raw_info)
+        source_path = ydl.prepare_filename(raw_info)
 
     _log_selected_download_format(info)
     return info, source_path
 
 
-def get_video_metadata(youtube_url: str) -> dict[str, Any]:
-    """Возвращает метаданные YouTube-видео: title и duration_seconds."""
+def get_video_metadata(youtube_url: str) -> dict[str, object]:
+    """Return YouTube video metadata: title and duration_seconds."""
     normalized_url = _validate_youtube_url(youtube_url)
 
-    ydl_opts = _build_ydl_options(
+    ydl_opts = build_ydl_options(
         skip_download=True,
         quiet=True,
         no_warnings=True,
         noplaylist=True,
     )
 
-    def operation() -> dict[str, Any]:
+    def operation() -> dict[str, object]:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(normalized_url, download=False, process=False)
+                raw_info = ydl.extract_info(
+                    normalized_url, download=False, process=False
+                )
         except DownloadError as exc:
             raise _build_download_error(
-                "Не удалось получить метаданные YouTube-видео",
+                "Failed to fetch YouTube video metadata",
                 youtube_url=normalized_url,
                 exc=exc,
                 ydl_opts=ydl_opts,
             ) from exc
 
-        if not isinstance(info, dict):
+        if not isinstance(raw_info, dict):
             raise YouTubeDownloadError(
-                "Не удалось получить метаданные видео",
+                "Failed to fetch video metadata",
                 details={"youtube_url": normalized_url, "retryable": True},
             )
 
+        info = _string_key_dict(raw_info)
         title_raw = info.get("title")
         title = (
             title_raw.strip()
@@ -405,25 +315,25 @@ def get_video_metadata(youtube_url: str) -> dict[str, Any]:
         raise
     except Exception as exc:
         raise YouTubeDownloadError(
-            "Не удалось получить метаданные YouTube-видео",
+            "Failed to fetch YouTube video metadata",
             details={"youtube_url": normalized_url, "retryable": True},
         ) from exc
 
 
 def download_audio(youtube_url: str) -> str:
-    """Скачивает и конвертирует аудио в mp3, возвращая путь к файлу."""
+    """Download and convert audio to mp3, returning the local file path."""
     normalized_url = _validate_youtube_url(youtube_url)
-    logger.info("Начата загрузка аудио с YouTube")
+    logger.info("Starting YouTube audio download")
 
     def operation() -> str:
         _clear_temp_folder()
         temp_dir = _create_temp_folder()
         output_template = os.path.join(temp_dir, "%(id)s.%(ext)s")
 
-        ydl_opts = _build_ydl_options(
+        ydl_opts = build_ydl_options(
             format=AUDIO_ONLY_FORMAT_SELECTOR,
             outtmpl=output_template,
-            extractor_args=_youtube_audio_extractor_args(),
+            extractor_args=youtube_audio_extractor_args(),
             noplaylist=True,
         )
 
@@ -432,20 +342,20 @@ def download_audio(youtube_url: str) -> str:
         except DownloadError as exc:
             if not _is_format_unavailable_error(exc):
                 raise _build_download_error(
-                    "Не удалось скачать аудио с YouTube",
+                    "Failed to download audio from YouTube",
                     youtube_url=normalized_url,
                     exc=exc,
                     ydl_opts=ydl_opts,
                 ) from exc
 
             logger.warning(
-                "YouTube не отдал audio-only формат; пробуем самый маленький "
-                "доступный формат с аудиодорожкой"
+                "YouTube did not provide an audio-only format; trying the smallest "
+                "available format with an audio stream"
             )
-            fallback_ydl_opts = _build_ydl_options(
+            fallback_ydl_opts = build_ydl_options(
                 format=SMALLEST_AUDIO_FALLBACK_FORMAT_SELECTOR,
                 outtmpl=output_template,
-                extractor_args=_youtube_fallback_extractor_args(),
+                extractor_args=youtube_fallback_extractor_args(),
                 noplaylist=True,
             )
             try:
@@ -454,7 +364,7 @@ def download_audio(youtube_url: str) -> str:
                 )
             except DownloadError as fallback_exc:
                 raise _build_download_error(
-                    "Не удалось скачать аудио с YouTube",
+                    "Failed to download audio from YouTube",
                     youtube_url=normalized_url,
                     exc=fallback_exc,
                     ydl_opts=fallback_ydl_opts,
@@ -462,33 +372,33 @@ def download_audio(youtube_url: str) -> str:
 
         if not source_path or not os.path.isfile(source_path):
             raise YouTubeDownloadError(
-                "Временный аудиофайл не найден после загрузки",
+                "Temporary audio file was not found after download",
                 details={"youtube_url": normalized_url, "retryable": True},
             )
 
         video_id = info.get("id")
         if not isinstance(video_id, str) or not video_id.strip():
             raise YouTubeDownloadError(
-                "Не удалось определить идентификатор видео",
+                "Failed to detect the YouTube video id",
                 details={"youtube_url": normalized_url, "retryable": False},
             )
 
         ffmpeg_path = _resolve_ffmpeg_path()
         mp3_path = os.path.join(temp_dir, f"{video_id}.mp3")
         try:
-            subprocess.run(  # nosec B603
+            subprocess.run(  # nosec B603  # noqa: S603
                 [
                     ffmpeg_path,
                     "-y",
                     "-i",
                     source_path,
-                    "-vn",  # убираем видеодорожку, если вдруг осталась
+                    "-vn",
                     "-ac",
-                    "1",  # моно (речь — 1 канал достаточно)
+                    "1",
                     "-ar",
-                    "16000",  # 16 kHz — стандарт для ASR-моделей
+                    "16000",
                     "-b:a",
-                    "48k",  # 48 kbps — достаточно для разборчивости речи
+                    "48k",
                     mp3_path,
                 ],
                 check=True,
@@ -497,7 +407,7 @@ def download_audio(youtube_url: str) -> str:
             )
         except subprocess.CalledProcessError as exc:
             raise YouTubeDownloadError(
-                "Ошибка конвертации аудио в mp3",
+                "Failed to convert audio to mp3",
                 details={
                     "stderr": (exc.stderr or "").strip()[:500],
                     "retryable": False,
@@ -506,7 +416,7 @@ def download_audio(youtube_url: str) -> str:
 
         if not os.path.isfile(mp3_path):
             raise YouTubeDownloadError(
-                "Файл mp3 не был создан",
+                "The mp3 file was not created",
                 details={"youtube_url": normalized_url, "retryable": False},
             )
 
@@ -515,7 +425,7 @@ def download_audio(youtube_url: str) -> str:
         ):
             os.remove(source_path)
 
-        logger.info("Аудио успешно загружено и конвертировано")
+        logger.info("Audio downloaded and converted successfully")
         return mp3_path
 
     try:
@@ -526,6 +436,6 @@ def download_audio(youtube_url: str) -> str:
         raise
     except Exception as exc:
         raise YouTubeDownloadError(
-            "Не удалось скачать аудио с YouTube",
+            "Failed to download audio from YouTube",
             details={"youtube_url": normalized_url, "retryable": True},
         ) from exc

@@ -3,10 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Настройки приложения, загружаемые из переменных окружения."""
+    """Application settings loaded from environment variables."""
 
-    api_key: str
-    admin_api_key: str
+    api_key: str = ""
+    admin_api_key: str = ""
     stt_model_name: str = "mistralai/voxtral-small-24b-2507"
     llm_model_name: str = "inclusionai/ring-2.6-1t:free"
     base_url: str = "https://openrouter.ai/api/v1"
@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     )
     log_level: str = "INFO"
     log_file_path: str = "./storage/logs/backend.log"
+    cors_allowed_origins: str = (
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:5173,http://127.0.0.1:5173"
+    )
     external_request_timeout_seconds: float = Field(default=45.0, gt=0)
     external_request_max_attempts: int = Field(default=3, ge=1, le=10)
     external_request_retry_delay_seconds: float = Field(default=3.0, ge=0)
@@ -31,6 +35,15 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = Field(default=8000, ge=1, le=65535)
 
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Return configured CORS origins as a normalized list."""
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+
     model_config = SettingsConfigDict(
         env_file=(".env", "/etc/secrets/.env", "/etc/secrets/env"),
         env_file_encoding="utf-8",
@@ -38,4 +51,4 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()  # type: ignore[call-arg]
+settings = Settings()

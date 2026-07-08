@@ -16,22 +16,22 @@ logger = get_logger(__name__)
 
 
 @router.delete("/videos/{video_id}")
-def remove_video(video_id: Annotated[int, Path(gt=0)]):
-    """Удаляет видео по id через административную ручку."""
+def remove_video(video_id: Annotated[int, Path(gt=0)]) -> dict[str, int]:
+    """Delete a video by id through the administrative API."""
     deleted = delete_video(video_id)
     if not deleted:
-        raise APINotFoundError("Видео не найдено")
+        raise APINotFoundError("Video was not found")
 
-    logger.info("Админ удалил видео: video_id=%s", video_id)
+    logger.info("Admin deleted video: video_id=%s", video_id)
     return {"deleted_video_id": video_id}
 
 
 @router.delete("/chat/sessions/{session_id}")
-def remove_chat_session(session_id: Annotated[int, Path(gt=0)]):
-    """Удаляет чат-сессию по id через административную ручку."""
+def remove_chat_session(session_id: Annotated[int, Path(gt=0)]) -> dict[str, int]:
+    """Delete a chat session by id through the administrative API."""
     deleted = delete_chat_session(session_id)
     if not deleted:
-        raise APINotFoundError("Сессия не найдена")
+        raise APINotFoundError("Chat session was not found")
 
-    logger.info("Админ удалил чат-сессию: session_id=%s", session_id)
+    logger.info("Admin deleted chat session: session_id=%s", session_id)
     return {"deleted_session_id": session_id}

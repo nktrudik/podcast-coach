@@ -1,18 +1,17 @@
-from typing import Any
-
-from psycopg import Error
-
 from app.core.logger import get_logger
+from app.core.types import DatabaseRecord
 from app.db.connection import get_connection
 from app.db.errors import DatabaseOperationError
+from app.db.rows import required_int, to_database_record
 from app.db.sequences import reset_sequence
 from app.db.validation import validate_optional_text, validate_positive_int
+from psycopg import Error
 
 logger = get_logger(__name__)
 
 
 def count_chat_sessions_by_video(video_id: int) -> int:
-    """Возвращает количество чат-сессий, привязанных к видео."""
+    """Return the number of chat sessions attached to a video."""
     validated_video_id = validate_positive_int(video_id, "video_id")
 
     try:
@@ -26,16 +25,14 @@ def count_chat_sessions_by_video(video_id: int) -> int:
                 (validated_video_id,),
             ).fetchone()
     except Error as exc:
-        raise DatabaseOperationError(
-            "Не удалось посчитать чат-сессии по видео"
-        ) from exc
+        raise DatabaseOperationError("Failed to count chat sessions") from exc
 
     total = row["total"] if row else 0
     return int(total) if isinstance(total, int) else 0
 
 
 def create_chat_session(video_id: int | None = None, title: str | None = None) -> int:
-    """Создает чат-сессию и возвращает ее идентификатор."""
+    """Create a chat session and return its id."""
     normalized_video_id = (
         None if video_id is None else validate_positive_int(video_id, "video_id")
     )
@@ -52,14 +49,16 @@ def create_chat_session(video_id: int | None = None, title: str | None = None) -
                 (normalized_video_id, normalized_title),
             ).fetchone()
             if row is None:
-                raise DatabaseOperationError("База данных не вернула id чат-сессии")
-            return int(row["id"])
+                raise DatabaseOperationError(
+                    "The database did not return a chat session id"
+                )
+            return required_int(row, "id", "chat session")
     except Error as exc:
-        raise DatabaseOperationError("Не удалось создать чат-сессию") from exc
+        raise DatabaseOperationError("Failed to create the chat session") from exc
 
 
-def get_chat_session(session_id: int) -> dict[str, Any] | None:
-    """Возвращает чат-сессию по идентификатору."""
+def get_chat_session(session_id: int) -> DatabaseRecord | None:
+    """Return a chat session by id."""
     validated_session_id = validate_positive_int(session_id, "session_id")
 
     try:
@@ -69,13 +68,13 @@ def get_chat_session(session_id: int) -> dict[str, Any] | None:
                 (validated_session_id,),
             ).fetchone()
     except Error as exc:
-        raise DatabaseOperationError("Не удалось получить чат-сессию") from exc
+        raise DatabaseOperationError("Failed to fetch the chat session") from exc
 
-    return dict(row) if row else None
+    return to_database_record(row) if row else None
 
 
 def delete_chat_session(session_id: int) -> bool:
-    """Удаляет чат-сессию и синхронизирует sequence таблиц."""
+    """Delete a chat session and synchronize related identity sequences."""
     validated_session_id = validate_positive_int(session_id, "session_id")
 
     try:
@@ -88,14 +87,14 @@ def delete_chat_session(session_id: int) -> bool:
             if deleted:
                 reset_sequence(conn, "chat_sessions")
                 reset_sequence(conn, "messages")
-                logger.info("Чат-сессия удалена: session_id=%s", validated_session_id)
+                logger.info("Chat session deleted: session_id=%s", validated_session_id)
             return deleted
     except Error as exc:
-        raise DatabaseOperationError("Не удалось удалить чат-сессию") from exc
+        raise DatabaseOperationError("Failed to delete the chat session") from exc
 
 
-def list_chat_sessions() -> list[dict[str, Any]]:
-    """Возвращает список чат-сессий в обратном порядке создания."""
+def list_chat_sessions() -> list[DatabaseRecord]:
+    """Return chat sessions in reverse creation order."""
     try:
         with get_connection() as conn:
             rows = conn.execute(
@@ -106,6 +105,6 @@ def list_chat_sessions() -> list[dict[str, Any]]:
                 """
             ).fetchall()
     except Error as exc:
-        raise DatabaseOperationError("Не удалось получить список чат-сессий") from exc
+        raise DatabaseOperationError("Failed to fetch chat sessions") from exc
 
-    return [dict(row) for row in rows]
+    return [to_database_record(row) for row in rows]

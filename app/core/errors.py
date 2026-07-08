@@ -1,8 +1,10 @@
-from typing import Any
+from collections.abc import Mapping
+
+from app.core.types import JsonValue
 
 
 class AppError(Exception):
-    """Базовая ошибка приложения с единым форматом для API-ответа."""
+    """Base application error with a consistent API response format."""
 
     module: str = "core"
     error_code: str = "app_error"
@@ -12,18 +14,18 @@ class AppError(Exception):
         self,
         message: str,
         *,
-        details: dict[str, Any] | None = None,
+        details: Mapping[str, JsonValue] | None = None,
         status_code: int | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
-        self.details = details or {}
+        self.details = dict(details) if details else {}
         if status_code is not None:
             self.status_code = status_code
 
-    def to_response(self) -> dict[str, Any]:
-        """Возвращает структуру ошибки для JSON-ответа."""
-        payload: dict[str, Any] = {
+    def to_response(self) -> dict[str, JsonValue]:
+        """Return a JSON-serializable error payload."""
+        payload: dict[str, JsonValue] = {
             "detail": self.message,
             "error_code": self.error_code,
             "module": self.module,
@@ -34,7 +36,7 @@ class AppError(Exception):
 
 
 class ValidationAppError(AppError):
-    """Ошибка валидации пользовательского ввода."""
+    """User input validation error."""
 
     module = "core"
     error_code = "validation_error"
